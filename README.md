@@ -140,8 +140,9 @@ This single command sets up:
 5. `pcgdm-warpram.service` (`systemd --user`)
 6. `pcgdm-hypergrab.service` (`systemd --user`)
 7. `pcgdm-hive.service` (`systemd --user`)
-8. `pcgdm-cryo.service` (root `systemd`)
-9. Passwordless sudoers rule for CPU/thermal execution.
+8. `pcgdm-telekey.service` (`systemd --user`)
+9. `pcgdm-cryo.service` (root `systemd`)
+10. Passwordless sudoers rule for CPU/thermal execution.
 
 ### 2. Verify Running Services
 Check the live status of all hardware telemetry and background services:
@@ -163,6 +164,8 @@ Check the live status of all hardware telemetry and background services:
 | `./godmode.sh sms <num> <msg>` | Send an SMS text message from your laptop terminal |
 | `./godmode.sh tv` | Show real-time Smart TV (TCL/Cast) status & uptime |
 | `./godmode.sh lan-scan` | Scan local airspace for all mDNS/ZeroConf devices |
+| `./godmode.sh tele-config <t> <id>` | Configure Telegram Bot Token and Chat ID for USB Hardware Key |
+| `./godmode.sh tele-status` | Check whether authorized USB hardware key is plugged in |
 | `./godmode.sh warp-sync`| Manually mirror in-memory `~/ramdisk` changes to persistent SSD right now |
 | `./godmode.sh purge` | Instantly flush Linux pagecache/dentries and reclaim RAM |
 | `./godmode.sh sweep` | Manually run a full file sort across all 35 user folders right now |

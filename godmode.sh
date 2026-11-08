@@ -15,6 +15,7 @@ AIRDROP_PY="$SCRIPT_DIR/airdrop_zero.py"
 WARP_PY="$SCRIPT_DIR/warp_ram.py"
 GRAB_PY="$SCRIPT_DIR/hyper_grab.py"
 HIVE_PY="$SCRIPT_DIR/hive_nexus.py"
+TELE_PY="$SCRIPT_DIR/tele_key.py"
 
 USER_SERVICE_DIR="$HOME/.config/systemd/user"
 AUTOSTART_DIR="$HOME/.config/autostart"
@@ -43,7 +44,11 @@ HIVE_SERVICE="pcgdm-hive.service"
 HIVE_SERVICE_FILE="$USER_SERVICE_DIR/$HIVE_SERVICE"
 HIVE_AUTOSTART="$AUTOSTART_DIR/pcgdm-hive.desktop"
 
-chmod +x "$JANITOR_CTL" "$CRYO_PY" "$FREEZER_PY" "$HUD_PY" "$AIRDROP_PY" "$WARP_PY" "$GRAB_PY" "$HIVE_PY"
+TELE_SERVICE="pcgdm-telekey.service"
+TELE_SERVICE_FILE="$USER_SERVICE_DIR/$TELE_SERVICE"
+TELE_AUTOSTART="$AUTOSTART_DIR/pcgdm-telekey.desktop"
+
+chmod +x "$JANITOR_CTL" "$CRYO_PY" "$FREEZER_PY" "$HUD_PY" "$AIRDROP_PY" "$WARP_PY" "$GRAB_PY" "$HIVE_PY" "$TELE_PY"
 
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'
@@ -273,6 +278,44 @@ EOF
     echo "[+] Hive Nexus service installed, enabled on boot/login, and running!"
 }
 
+install_tele_service() {
+    mkdir -p "$USER_SERVICE_DIR" "$AUTOSTART_DIR"
+    cat > "$TELE_SERVICE_FILE" <<EOF
+[Unit]
+Description=PC-GDM Hardware USB Telegram Remote Bridge
+After=network.target graphical-session.target pcgdm-hud.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 $TELE_PY
+Restart=always
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+Environment=DISPLAY=${DISPLAY:-:0}
+Environment=XAUTHORITY=${XAUTHORITY:-$HOME/.Xauthority}
+
+[Install]
+WantedBy=default.target
+EOF
+
+    cat > "$TELE_AUTOSTART" <<EOF
+[Desktop Entry]
+Type=Application
+Name=PC-GDM TeleKey
+Comment=Hardware USB Telegram Remote Control Daemon
+Exec=/usr/bin/python3 $TELE_PY
+Terminal=false
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
+EOF
+
+    systemctl --user daemon-reload
+    systemctl --user enable "$TELE_SERVICE"
+    systemctl --user restart "$TELE_SERVICE"
+    echo "[+] TeleKey Hardware USB Bridge installed, enabled on boot/login, and running!"
+}
+
 install_all() {
     echo -e "${BOLD}╔══════════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BOLD}║       pcGDM MASTER INSTALLER — Activating All Boot Services      ║${NC}"
@@ -296,13 +339,16 @@ install_all() {
     echo -e "\n${CYAN}[6/8] Enabling Hyper-Grab (Autonomous Clip-to-Action Downloader)...${NC}"
     install_grab_service
 
-    echo -e "\n${CYAN}[7/8] Enabling Hive Nexus (Local Mesh IoT & Device Coordinator)...${NC}"
+    echo -e "\n${CYAN}[7/9] Enabling Hive Nexus (Local Mesh IoT & Device Coordinator)...${NC}"
     install_hive_service
 
-    echo -e "\n${CYAN}[8/8] Enabling Unified Cryo + Power + RAM Engine (Root Boot Daemon)...${NC}"
+    echo -e "\n${CYAN}[8/9] Enabling TeleKey Bridge (Hardware USB Telegram Remote Control)...${NC}"
+    install_tele_service
+
+    echo -e "\n${CYAN}[9/9] Enabling Unified Cryo + Power + RAM Engine (Root Boot Daemon)...${NC}"
     sudo python3 "$CRYO_PY" install
 
-    echo -e "\n${GREEN}${BOLD}[✓] ALL 8 GOD MODE SERVICES INSTALLED AND ENABLED ON BOOT!${NC}"
+    echo -e "\n${GREEN}${BOLD}[✓] ALL 9 GOD MODE SERVICES INSTALLED AND ENABLED ON BOOT!${NC}"
 }
 
 status_all() {
@@ -313,6 +359,8 @@ status_all() {
     python3 "$WARP_PY" status
     echo ""
     python3 "$HIVE_PY" status
+    echo ""
+    python3 "$TELE_PY" status
     echo ""
     echo -e "${BOLD}╔══════════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BOLD}║     pcGDM SYSTEMCTL DAEMON STATUS (Survives Every Restart)       ║${NC}"
@@ -331,10 +379,12 @@ status_all() {
     systemctl --user is-active pcgdm-hypergrab.service || true
     echo -ne "  ${BOLD}7. Hive Nexus (User)    :${NC} "
     systemctl --user is-active pcgdm-hive.service || true
-    echo -ne "  ${BOLD}8. Cryo+RAM Engine      :${NC} "
+    echo -ne "  ${BOLD}8. TeleKey USB Bridge   :${NC} "
+    systemctl --user is-active pcgdm-telekey.service || true
+    echo -ne "  ${BOLD}9. Cryo+RAM Engine      :${NC} "
     systemctl is-active pcgdm-cryo.service || true
-    echo -e "  ${BOLD}9. Keyboard Backlight   :${NC} $(python3 "$HUD_PY" get 2>/dev/null || echo 'N/A')"
-    echo -e "  ${BOLD}10. AirDrop-Zero URL    :${NC} $(python3 "$AIRDROP_PY" url 2>/dev/null || echo 'N/A')"
+    echo -e "  ${BOLD}10. Keyboard Backlight  :${NC} $(python3 "$HUD_PY" get 2>/dev/null || echo 'N/A')"
+    echo -e "  ${BOLD}11. AirDrop-Zero URL    :${NC} $(python3 "$AIRDROP_PY" url 2>/dev/null || echo 'N/A')"
 }
 
 case "${1:-status}" in
@@ -358,6 +408,16 @@ case "${1:-status}" in
         ;;
     install-hive)
         install_hive_service
+        ;;
+    install-tele)
+        install_tele_service
+        ;;
+    tele-config)
+        python3 "$TELE_PY" config "${2:-}" "${3:-}"
+        systemctl --user restart pcgdm-telekey.service
+        ;;
+    tele-status)
+        python3 "$TELE_PY" status
         ;;
     ring|find-phone)
         python3 "$HIVE_PY" ring-phone
@@ -412,8 +472,10 @@ case "${1:-status}" in
 Usage: ./godmode.sh <command>
 
 Commands:
-  install          One-click install & enable ALL 8 God Mode services on boot (systemctl)
+  install          One-click install & enable ALL 9 God Mode services on boot (systemctl)
   status           Show live hardware telemetry, frozen tabs, and systemctl service states
+  tele-config <t> <id>  Configure Telegram Bot Token and Chat ID for USB Hardware Key
+  tele-status      Check whether authorized USB hardware key is plugged in
   ring             Ring your Galaxy S9+ from your laptop terminal
   phone-clip       Push your laptop's current clipboard straight to your phone
   phone-share <f>  Send a file or URL directly to your phone
