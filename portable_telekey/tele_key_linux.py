@@ -187,6 +187,46 @@ def get_system_telemetry() -> Dict[str, str]:
     }
 
 
+def speak_deep_human(text: str) -> None:
+    """Plays deep, realistic, natural-fast human voice through MacBook speakers."""
+    try:
+        subprocess.run(["pactl", "set-sink-mute", "@DEFAULT_SINK@", "false"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2)
+    except Exception:
+        pass
+
+    spoken = False
+    try:
+        from gtts import gTTS
+        raw_mp3 = Path(f"/tmp/tts_raw_{int(time.time()*1000)}.mp3")
+        deep_mp3 = Path(f"/tmp/tts_deep_{int(time.time()*1000)}.mp3")
+        tts = gTTS(text=text, lang="en", tld="co.uk", slow=False)
+        tts.save(str(raw_mp3))
+        res = subprocess.run(
+            f'ffmpeg -y -i "{raw_mp3}" -af "asetrate=24000*0.82,aresample=24000,atempo=1.28" "{deep_mp3}"',
+            shell=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=8
+        )
+        if res.returncode == 0 and deep_mp3.exists() and deep_mp3.stat().st_size > 0:
+            if shutil.which("mpv"):
+                subprocess.run(["mpv", "--no-video", "--really-quiet", str(deep_mp3)], timeout=25)
+            elif shutil.which("ffplay"):
+                subprocess.run(["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", str(deep_mp3)], timeout=25)
+            spoken = True
+        raw_mp3.unlink(missing_ok=True)
+        deep_mp3.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+    if not spoken:
+        try:
+            safe_text = text.replace('"', ' ').replace('`', ' ')
+            subprocess.run(["espeak", "-v", "en-us+m3", "-p", "28", "-s", "170", "-a", "130", safe_text], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15)
+        except Exception:
+            pass
+
+
 class TelegramBotBridge:
     def __init__(self, token: str, chat_id: str, alias: str):
         self.token = token.strip()
@@ -626,6 +666,9 @@ class TelegramBotBridge:
         elif lower.startswith("mic") or lower.startswith("/mic") or lower.startswith("record") or lower.startswith("/record"):
             cmd = "/mic"
             args = parts[1:] if len(parts) > 1 else []
+        elif lower.startswith("say ") or lower.startswith("/say ") or lower in ("/say", "say", "speak", "/speak"):
+            cmd = "/say"
+            args = parts[1:] if len(parts) > 1 else []
         elif lower in ("/update", "update", "apt update"):
             cmd = "/update"
             args = []
@@ -653,6 +696,7 @@ class TelegramBotBridge:
                 f"• `/screenshot` - Instant Desktop Photo\n"
                 f"• `/cam` - FaceTime HD Webcam Sentry Photo\n"
                 f"• `/mic [sec]` - Record Room Audio Bug (default: 5s)\n"
+                f"• `/say <text>` - Voice of God Audio Projection (Speaks aloud)\n"
                 f"• `/lock` - Lock Screen Session\n"
                 f"• `/ring` - Ring Galaxy S9+\n"
                 f"• `/clip` - Get Clipboard Text\n"
@@ -860,6 +904,14 @@ class TelegramBotBridge:
                 self.send_message("⏱️ Audio recording timed out.")
             except Exception as e:
                 self.send_message(f"❌ Audio recording error: {e}")
+
+        elif cmd == "/say":
+            if not args:
+                self.send_message("Usage: `/say <message to speak aloud>`\nExample: `/say Step away from my computer right now!`")
+            else:
+                message_to_speak = " ".join(args).strip()
+                threading.Thread(target=speak_deep_human, args=(message_to_speak,), daemon=True).start()
+                self.send_message(f"🗣️ *Broadcasted via MacBook Speakers:*\n> \"{message_to_speak}\"")
 
         elif cmd == "/lock":
             try:
