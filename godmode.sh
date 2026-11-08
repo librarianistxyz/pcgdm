@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# pcGDM — MASTER GOD MODE CONTROLLER (Xubuntu / 2012 MacBook Pro)
-# One command to install, start, and monitor all God Mode daemons across reboots
+# pcGDM — MASTER GOD MODE CONTROLLER (Xubuntu / Linux)
+# One command to install, start, and monitor all 6 God Mode daemons across reboots
 # ==============================================================================
 
 set -euo pipefail
@@ -12,6 +12,7 @@ CRYO_PY="$SCRIPT_DIR/cryo_ram_boost.py"
 FREEZER_PY="$SCRIPT_DIR/focus_freezer.py"
 HUD_PY="$SCRIPT_DIR/mac_hud.py"
 AIRDROP_PY="$SCRIPT_DIR/airdrop_zero.py"
+WARP_PY="$SCRIPT_DIR/warp_ram.py"
 
 USER_SERVICE_DIR="$HOME/.config/systemd/user"
 AUTOSTART_DIR="$HOME/.config/autostart"
@@ -28,7 +29,11 @@ AIRDROP_SERVICE="pcgdm-airdrop.service"
 AIRDROP_SERVICE_FILE="$USER_SERVICE_DIR/$AIRDROP_SERVICE"
 AIRDROP_AUTOSTART="$AUTOSTART_DIR/pcgdm-airdrop.desktop"
 
-chmod +x "$JANITOR_CTL" "$CRYO_PY" "$FREEZER_PY" "$HUD_PY" "$AIRDROP_PY"
+WARP_SERVICE="pcgdm-warpram.service"
+WARP_SERVICE_FILE="$USER_SERVICE_DIR/$WARP_SERVICE"
+WARP_AUTOSTART="$AUTOSTART_DIR/pcgdm-warpram.desktop"
+
+chmod +x "$JANITOR_CTL" "$CRYO_PY" "$FREEZER_PY" "$HUD_PY" "$AIRDROP_PY" "$WARP_PY"
 
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'
@@ -147,33 +152,74 @@ EOF
     echo "[+] AirDrop-Zero service installed, enabled on boot/login, and running!"
 }
 
+install_warp_service() {
+    mkdir -p "$USER_SERVICE_DIR" "$AUTOSTART_DIR"
+    cat > "$WARP_SERVICE_FILE" <<EOF
+[Unit]
+Description=pcGDM Warp-RAM Accelerator (In-Memory Build Scratchpad & Auto-Sync)
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 $WARP_PY daemon
+ExecStop=/usr/bin/python3 $WARP_PY sync
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
+EOF
+
+    cat > "$WARP_AUTOSTART" <<EOF
+[Desktop Entry]
+Type=Application
+Name=pcGDM Warp-RAM
+Comment=In-Memory High-Speed Build Scratchpad
+Exec=systemctl --user start $WARP_SERVICE
+Icon=drive-harddisk
+Terminal=false
+Hidden=false
+X-GNOME-Autostart-enabled=true
+EOF
+
+    systemctl --user daemon-reload
+    systemctl --user enable "$WARP_SERVICE"
+    systemctl --user restart "$WARP_SERVICE"
+    echo "[+] Warp-RAM service installed, enabled on boot/login, and running!"
+}
+
 install_all() {
     echo -e "${BOLD}╔══════════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BOLD}║       pcGDM MASTER INSTALLER — Activating All Boot Services      ║${NC}"
     echo -e "${BOLD}╚══════════════════════════════════════════════════════════════════╝${NC}"
 
-    echo -e "\n${CYAN}[1/5] Enabling Broad Auto-Janitor (35+ Folders Real-Time Sorter)...${NC}"
+    echo -e "\n${CYAN}[1/6] Enabling Broad Auto-Janitor (35+ Folders Real-Time Sorter)...${NC}"
     "$JANITOR_CTL" install --no-initial-sweep
 
-    echo -e "\n${CYAN}[2/5] Enabling Focus Freezer (Zero-CPU Background Browser Freezer)...${NC}"
+    echo -e "\n${CYAN}[2/6] Enabling Focus Freezer (Zero-CPU Background Browser Freezer)...${NC}"
     install_freezer_service
 
-    echo -e "\n${CYAN}[3/5] Enabling Keyboard Pulse HUD (Apple SMC Ambient Hardware Monitor)...${NC}"
+    echo -e "\n${CYAN}[3/6] Enabling Keyboard Pulse HUD (Hardware Ambient Monitor)...${NC}"
     install_hud_service
 
-    echo -e "\n${CYAN}[4/5] Enabling AirDrop-Zero (Peer-to-Peer Local Network File Dropper)...${NC}"
+    echo -e "\n${CYAN}[4/6] Enabling AirDrop-Zero (Peer-to-Peer Local Network File Dropper)...${NC}"
     install_airdrop_service
 
-    echo -e "\n${CYAN}[5/5] Enabling Unified Cryo + Power + RAM Engine (Root Boot Daemon)...${NC}"
+    echo -e "\n${CYAN}[5/6] Enabling Warp-RAM Scratchpad (In-Memory Build Accelerator)...${NC}"
+    install_warp_service
+
+    echo -e "\n${CYAN}[6/6] Enabling Unified Cryo + Power + RAM Engine (Root Boot Daemon)...${NC}"
     sudo python3 "$CRYO_PY" install
 
-    echo -e "\n${GREEN}${BOLD}[✓] ALL 5 GOD MODE SERVICES INSTALLED AND ENABLED ON BOOT!${NC}"
+    echo -e "\n${GREEN}${BOLD}[✓] ALL 6 GOD MODE SERVICES INSTALLED AND ENABLED ON BOOT!${NC}"
 }
 
 status_all() {
     python3 "$CRYO_PY" status
     echo ""
     python3 "$FREEZER_PY" status
+    echo ""
+    python3 "$WARP_PY" status
     echo ""
     echo -e "${BOLD}╔══════════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BOLD}║     pcGDM SYSTEMCTL DAEMON STATUS (Survives Every Restart)       ║${NC}"
@@ -186,10 +232,12 @@ status_all() {
     systemctl --user is-active pcgdm-hud.service || true
     echo -ne "  ${BOLD}4. AirDrop-Zero (User)  :${NC} "
     systemctl --user is-active pcgdm-airdrop.service || true
-    echo -ne "  ${BOLD}5. Cryo+RAM Engine      :${NC} "
+    echo -ne "  ${BOLD}5. Warp-RAM (User)      :${NC} "
+    systemctl --user is-active pcgdm-warpram.service || true
+    echo -ne "  ${BOLD}6. Cryo+RAM Engine      :${NC} "
     systemctl is-active pcgdm-cryo.service || true
-    echo -e "  ${BOLD}6. Keyboard Backlight   :${NC} $(python3 "$HUD_PY" get 2>/dev/null || echo 'N/A')"
-    echo -e "  ${BOLD}7. AirDrop-Zero URL     :${NC} $(python3 "$AIRDROP_PY" url 2>/dev/null || echo 'N/A')"
+    echo -e "  ${BOLD}7. Keyboard Backlight   :${NC} $(python3 "$HUD_PY" get 2>/dev/null || echo 'N/A')"
+    echo -e "  ${BOLD}8. AirDrop-Zero URL     :${NC} $(python3 "$AIRDROP_PY" url 2>/dev/null || echo 'N/A')"
 }
 
 case "${1:-status}" in
@@ -204,6 +252,12 @@ case "${1:-status}" in
         ;;
     install-airdrop)
         install_airdrop_service
+        ;;
+    install-warp)
+        install_warp_service
+        ;;
+    warp-sync)
+        python3 "$WARP_PY" sync
         ;;
     drop|airdrop|qr)
         python3 "$AIRDROP_PY" qr
@@ -237,8 +291,9 @@ case "${1:-status}" in
 Usage: ./godmode.sh <command>
 
 Commands:
-  install          One-click install & enable ALL 5 God Mode services on boot (systemctl)
+  install          One-click install & enable ALL 6 God Mode services on boot (systemctl)
   status           Show live hardware telemetry, frozen tabs, and systemctl service states
+  warp-sync        Manually flush in-memory ~/ramdisk to SSD right now
   drop / qr        Print AirDrop-Zero connection QR code/URL for your phone
   sweep            Manually sort all existing loose files across your folders right now
   purge            Manually flush Linux RAM caches right now
