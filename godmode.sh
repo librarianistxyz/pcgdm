@@ -472,6 +472,18 @@ case "${1:-status}" in
         sudo rm -f /etc/sudoers.d/pcgdm-admin
         echo "✅ Sudoers rule removed. Standard password prompt restored."
         ;;
+    visualizer|viz|dance)
+        if [ "${2:-}" = "stop" ]; then
+            python3 "$SCRIPT_DIR/mac_visualizer.py" stop
+        elif [ "${2:-}" = "status" ]; then
+            python3 "$SCRIPT_DIR/mac_visualizer.py" status
+        else
+            python3 "$SCRIPT_DIR/mac_visualizer.py" "${2:-music}" --daemon
+        fi
+        ;;
+    stop-viz|noviz)
+        python3 "$SCRIPT_DIR/mac_visualizer.py" stop
+        ;;
     turbo|stealth|cryo|balanced)
         sudo python3 "$CRYO_PY" "$1"
         ;;
@@ -503,6 +515,8 @@ Commands:
   cryo             Override daemon with 6200 RPM max fan blast
   root-freedom     Enable Option B (passwordless sudo for Telegram God Mode)
   revoke-root      Revoke Option B and restore password prompt
+  visualizer [m]   Start keyboard beat visualizer ('music' or 'typing')
+  stop-viz         Stop visualizer and restore normal brightness
 EOF
         ;;
 esac

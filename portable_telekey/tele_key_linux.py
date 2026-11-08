@@ -669,6 +669,9 @@ class TelegramBotBridge:
         elif lower.startswith("say ") or lower.startswith("/say ") or lower in ("/say", "say", "speak", "/speak"):
             cmd = "/say"
             args = parts[1:] if len(parts) > 1 else []
+        elif lower.startswith("grab ") or lower.startswith("/grab ") or lower.startswith("/ytdl ") or lower.startswith("ytdl ") or any(domain in lower for domain in ("youtube.com", "youtu.be", "tiktok.com", "instagram.com", "twitter.com", "x.com/")):
+            cmd = "/grab"
+            args = parts[1:] if parts[0].startswith(("/", "grab", "ytdl")) else parts
         elif lower in ("/update", "update", "apt update"):
             cmd = "/update"
             args = []
@@ -697,6 +700,7 @@ class TelegramBotBridge:
                 f"• `/cam` - FaceTime HD Webcam Sentry Photo\n"
                 f"• `/mic [sec]` - Record Room Audio Bug (default: 5s)\n"
                 f"• `/say <text>` - Voice of God Audio Projection (Speaks aloud)\n"
+                f"• `/grab <url>` - Download Video in 720p MP4 (YouTube, TikTok, X)\n"
                 f"• `/lock` - Lock Screen Session\n"
                 f"• `/ring` - Ring Galaxy S9+\n"
                 f"• `/clip` - Get Clipboard Text\n"
@@ -912,6 +916,45 @@ class TelegramBotBridge:
                 message_to_speak = " ".join(args).strip()
                 threading.Thread(target=speak_deep_human, args=(message_to_speak,), daemon=True).start()
                 self.send_message(f"🗣️ *Broadcasted via MacBook Speakers:*\n> \"{message_to_speak}\"")
+
+        elif cmd in ("/grab", "/ytdl"):
+            if not args:
+                self.send_message("Usage: `/grab <video URL>`\nDownloads video in crisp 720p MP4 directly into `~/Videos/`.")
+            else:
+                video_url = args[0] if not args[0].startswith(("-", "/")) else (args[1] if len(args) > 1 else "")
+                if not video_url or not (video_url.startswith("http://") or video_url.startswith("https://")):
+                    self.send_message("❌ Please provide a valid URL (e.g. YouTube, TikTok, Twitter).")
+                else:
+                    self.send_message(f"🎬 Downloading video in **720p MP4** in background...\n🔗 `{video_url[:60]}`")
+
+                    def download_worker():
+                        out_dir = Path.home() / "Videos"
+                        out_dir.mkdir(parents=True, exist_ok=True)
+                        out_template = str(out_dir / "%(title).60s [%(id)s].%(ext)s")
+                        cmd_ytdl = [
+                            "/usr/local/bin/yt-dlp",
+                            "-f", "bestvideo[height<=720]+bestaudio/best[height<=720]/best",
+                            "--merge-output-format", "mp4",
+                            "--no-playlist",
+                            "-o", out_template,
+                            video_url
+                        ]
+                        proc = subprocess.run(cmd_ytdl, capture_output=True, text=True)
+                        if proc.returncode == 0:
+                            lines = proc.stdout.strip().splitlines()
+                            dest_file = ""
+                            for l in lines:
+                                if "[Merger] Merging formats into" in l:
+                                    dest_file = l.split("into", 1)[1].strip().strip('"')
+                                elif "[download] Destination:" in l:
+                                    dest_file = l.split("Destination:", 1)[1].strip()
+                            file_name = Path(dest_file).name if dest_file else "Video"
+                            self.send_message(f"✅ *720p Download Complete!*\n📄 `{file_name}`\n📁 Saved to `~/Videos/`")
+                        else:
+                            err = proc.stderr[-200:] if proc.stderr else "Unknown error"
+                            self.send_message(f"❌ Download failed: {err[:150]}")
+
+                    threading.Thread(target=download_worker, daemon=True).start()
 
         elif cmd == "/lock":
             try:

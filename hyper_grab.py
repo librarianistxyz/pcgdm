@@ -5,10 +5,11 @@ Autonomous Clip-to-Action Watcher for Xubuntu / Linux.
 
 Monitors X11 clipboard in real time (<0.1s latency, 0% CPU):
 1. Media URL Detection (YouTube, TikTok, Twitter/X, Instagram, Vimeo, Reddit, Soundcloud):
-   - Triggers quick actionable popup menu (via rofi / zenity / notification)
-   - Downloads 1080p Video OR High-Quality MP3 directly into ~/Downloads/
-   - Auto-Janitor automatically sorts it into Videos/ or Audio/ upon completion!
-   - Keyboard backlight flashes twice when ready.
+   - Zero startup popups on PC restart / login (pre-existing session links are safely ignored)
+   - Triggers clean action popup strictly when the user actively copies a new media link
+   - Downloads 720p Video (MP4) OR High-Quality MP3 directly into ~/Downloads/
+   - Safe filenames: handles emojis, quotes, and unicode cleanly
+   - Keyboard backlight flashes twice upon completion
 2. Unformatted JSON Detection:
    - When messy JSON is copied, automatically beautifies and formats it directly on the clipboard.
 """
@@ -17,7 +18,6 @@ import argparse
 import datetime
 import json
 import os
-import re
 import signal
 import subprocess
 import sys
@@ -27,6 +27,7 @@ from pathlib import Path
 
 DOWNLOAD_DIR = Path.home() / "Downloads"
 LOG_FILE = Path.home() / ".local" / "share" / "pcGDM" / "hyper_grab.log"
+HANDLED_URLS_FILE = Path.home() / ".local" / "share" / "pcGDM" / "hyper_grab_handled.txt"
 
 MEDIA_DOMAINS = [
     "youtube.com", "youtu.be", "tiktok.com", "twitter.com", "x.com",
@@ -42,6 +43,25 @@ def log(msg: str) -> None:
         LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(LOG_FILE, "a", encoding="utf-8") as f:
             f.write(line + "\n")
+    except Exception:
+        pass
+
+
+def load_handled_urls() -> set:
+    if HANDLED_URLS_FILE.exists():
+        try:
+            lines = HANDLED_URLS_FILE.read_text(encoding="utf-8").splitlines()
+            return {line.strip() for line in lines if line.strip()}
+        except Exception:
+            pass
+    return set()
+
+
+def mark_url_handled(url: str) -> None:
+    try:
+        HANDLED_URLS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(HANDLED_URLS_FILE, "a", encoding="utf-8") as f:
+            f.write(url.strip() + "\n")
     except Exception:
         pass
 
@@ -92,10 +112,10 @@ def download_media_async(url: str, mode: str) -> None:
     """Runs yt-dlp in a background thread so the clipboard watcher never blocks."""
     def worker():
         log(f"Starting download [{mode}]: {url}")
-        notify("Hyper-Grab Downloading", f"Downloading {mode.upper()} in background...", timeout_ms=3000)
-        
+        notify("Hyper-Grab Downloading", f"Downloading {mode.upper()} in 720p background...", timeout_ms=3000)
+
         DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        out_template = str(DOWNLOAD_DIR / "%(title).60s [%(id)s].%(ext)s")
+        out_template = str(DOWNLOAD_DIR / "%(title).50B [%(id)s].%(ext)s")
 
         if mode == "mp3":
             cmd = [
@@ -103,16 +123,20 @@ def download_media_async(url: str, mode: str) -> None:
                 "-x", "--audio-format", "mp3",
                 "--audio-quality", "0",
                 "--no-playlist",
+                "--restrict-filenames",
+                "--no-part",
                 "-o", out_template,
                 url
             ]
         else:
-            # High quality MP4 (up to 1080p for fast Ivy Bridge playback)
+            # 720p MP4 capped for fast downloads and smooth decoding
             cmd = [
                 "/usr/local/bin/yt-dlp",
-                "-f", "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
+                "-f", "bestvideo[height<=720]+bestaudio/best[height<=720]/best",
                 "--merge-output-format", "mp4",
                 "--no-playlist",
+                "--restrict-filenames",
+                "--no-part",
                 "-o", out_template,
                 url
             ]
@@ -120,7 +144,7 @@ def download_media_async(url: str, mode: str) -> None:
         res = subprocess.run(cmd, capture_output=True, text=True, check=False)
         if res.returncode == 0:
             log(f"Download complete [{mode}]: {url}")
-            notify("Hyper-Grab Finished! ⚡", f"Saved to ~/Downloads ({mode.upper()})\nAuto-Janitor will organize it.", timeout_ms=4500)
+            notify("Hyper-Grab Finished! ⚡", f"Saved to ~/Downloads ({mode.upper()}) capped at 720p.", timeout_ms=4500)
             flash_keyboard()
         else:
             err = res.stderr[-200:] if res.stderr else "Unknown error"
@@ -132,8 +156,8 @@ def download_media_async(url: str, mode: str) -> None:
 
 
 def prompt_user_action(url: str) -> None:
-    """Presents a lightweight non-intrusive action dialog via rofi or zenity."""
-    options = "1. Download 1080p Video (MP4)\n2. Download Audio Only (MP3)\n3. Ignore"
+    """Presents a lightweight actionable dialog via rofi or zenity."""
+    options = "1. Download 720p Video (MP4)\n2. Download Audio Only (MP3)\n3. Ignore"
     selected = ""
 
     # Try rofi first (fast keyboard overlay)
@@ -154,7 +178,7 @@ def prompt_user_action(url: str) -> None:
         try:
             res = subprocess.check_output(
                 ["zenity", "--list", "--title=⚡ Hyper-Grab Media Detected",
-                 "--column=Action", "1080p Video", "Audio MP3", "Ignore",
+                 "--column=Action", "720p Video", "Audio MP3", "Ignore",
                  "--text=URL: " + url[:50] + "...", "--timeout=10"],
                 text=True, stderr=subprocess.DEVNULL
             ).strip()
@@ -162,7 +186,7 @@ def prompt_user_action(url: str) -> None:
         except Exception:
             return
 
-    if "Video" in selected or "1080p" in selected:
+    if "Video" in selected or "720p" in selected or "1080p" in selected:
         download_media_async(url, mode="video")
     elif "Audio" in selected or "MP3" in selected:
         download_media_async(url, mode="mp3")
@@ -204,14 +228,56 @@ def run_daemon() -> None:
     signal.signal(signal.SIGINT, sig_handler)
     signal.signal(signal.SIGTERM, sig_handler)
 
-    last_clip = get_clipboard()
+    handled_urls = load_handled_urls()
+    start_time = time.time()
+
+    # Startup stabilization: wait for X11 clipboard & CopyQ to settle
+    # Capture whatever is already present in the clipboard on boot and mark it handled
+    initial_clip = ""
+    for _ in range(8):
+        initial_clip = get_clipboard()
+        if initial_clip:
+            break
+        time.sleep(0.5)
+
+    last_clip = initial_clip
+    if initial_clip and is_media_url(initial_clip):
+        handled_urls.add(initial_clip)
+        mark_url_handled(initial_clip)
+        log(f"Silenced startup popup for pre-existing session URL: {initial_clip[:60]}")
+
+    # Also check CopyQ top history item to suppress pre-reboot clips
+    try:
+        top_clip = subprocess.check_output(["copyq", "read", "0"], stderr=subprocess.DEVNULL, timeout=1.0).decode("utf-8", "ignore").strip()
+        if top_clip and is_media_url(top_clip):
+            handled_urls.add(top_clip)
+            mark_url_handled(top_clip)
+            if not last_clip:
+                last_clip = top_clip
+    except Exception:
+        pass
+
+    log("Hyper-Grab watcher armed. Watching strictly for new link copies.")
 
     while True:
         try:
             current = get_clipboard()
             if current and current != last_clip:
                 last_clip = current
-                handle_clipboard_content(current)
+
+                # Only trigger popup if:
+                # 1) It is a media link
+                # 2) It is NOT an already handled URL
+                # 3) The daemon has passed the 6-second boot stabilization window
+                if is_media_url(current):
+                    if (current not in handled_urls) and (time.time() - start_time > 6.0):
+                        handled_urls.add(current)
+                        mark_url_handled(current)
+                        handle_clipboard_content(current)
+                    else:
+                        handled_urls.add(current)
+                else:
+                    handle_clipboard_content(current)
 
             time.sleep(0.4)
         except Exception as e:
@@ -228,6 +294,7 @@ def main() -> None:
         print(f"  Target Download: {DOWNLOAD_DIR}")
         print(f"  Supported Media: YouTube, TikTok, Twitter/X, Instagram, Reddit, Soundcloud")
         print(f"  Log File       : {LOG_FILE}")
+        print(f"  Handled URLs   : {len(load_handled_urls())} cached")
     elif args.command == "daemon":
         run_daemon()
 
