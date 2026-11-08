@@ -31,6 +31,8 @@ CONFIG_DIR = Path.home() / ".config" / "pcGDM"
 CONFIG_FILE = CONFIG_DIR / "tele_config.json"
 STATE_DIR = Path.home() / ".local" / "share" / "pcGDM"
 SCREENSHOT_TMP = Path("/tmp/tele_screen.png")
+WEBCAM_TMP = Path("/tmp/tele_cam.jpg")
+VOICE_TMP = Path("/tmp/tele_mic.ogg")
 
 # Hardware defaults (Detected from your 16GB Bootable Flash Drive)
 DEFAULT_TARGET_SERIAL = "0377291581335169734"
@@ -318,6 +320,31 @@ class TelegramBotBridge:
             print(f"[TeleKey] send_photo error: {e}", file=sys.stderr)
             return False
 
+    def send_voice(self, voice_path: Path, caption: str = "") -> bool:
+        if not self.token or not self.chat_id or not voice_path.exists():
+            return False
+
+        if shutil.which("curl"):
+            cmd = [
+                "curl", "-s", "-S",
+                "--connect-timeout", "15",
+                "--max-time", "90",
+                "-F", f"chat_id={self.chat_id}",
+                "-F", f"voice=@{str(voice_path)}",
+            ]
+            if caption:
+                cmd.extend(["-F", f"caption={caption}"])
+            cmd.append(f"{self.api_url}/sendVoice")
+            try:
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=100)
+                if res.returncode == 0 and '"ok":true' in res.stdout:
+                    return True
+                print(f"[TeleKey] curl send_voice failed: {res.stderr or res.stdout}", file=sys.stderr)
+            except Exception as e:
+                print(f"[TeleKey] curl send_voice error: {e}", file=sys.stderr)
+
+        return self.send_document(voice_path, caption=caption)
+
     def send_document(self, file_path: Path, caption: str = "") -> bool:
         if not self.token or not self.chat_id or not file_path.exists():
             return False
@@ -593,6 +620,12 @@ class TelegramBotBridge:
         elif "eject" in lower:
             cmd = "/eject"
             args = []
+        elif lower in ("/cam", "/webcam", "cam", "webcam", "camera"):
+            cmd = "/cam"
+            args = []
+        elif lower.startswith("mic") or lower.startswith("/mic") or lower.startswith("record") or lower.startswith("/record"):
+            cmd = "/mic"
+            args = parts[1:] if len(parts) > 1 else []
         elif lower in ("/update", "update", "apt update"):
             cmd = "/update"
             args = []
@@ -618,6 +651,8 @@ class TelegramBotBridge:
                 f"• `/find <name>` - Search for Files\n"
                 f"• `/status` - Live CPU, RAM, Battery & Thermals\n"
                 f"• `/screenshot` - Instant Desktop Photo\n"
+                f"• `/cam` - FaceTime HD Webcam Sentry Photo\n"
+                f"• `/mic [sec]` - Record Room Audio Bug (default: 5s)\n"
                 f"• `/lock` - Lock Screen Session\n"
                 f"• `/ring` - Ring Galaxy S9+\n"
                 f"• `/clip` - Get Clipboard Text\n"
@@ -761,6 +796,70 @@ class TelegramBotBridge:
                     self.send_message("❌ Failed to capture screenshot (display session not available).")
             except Exception as e:
                 self.send_message(f"❌ Screenshot error: {e}")
+
+        elif cmd in ("/cam", "/webcam", "/camera"):
+            self.send_message("📸 Activating FaceTime HD Camera Sentry...")
+            try:
+                if WEBCAM_TMP.exists():
+                    WEBCAM_TMP.unlink()
+
+                cmd_ffmpeg = [
+                    "ffmpeg", "-y",
+                    "-f", "v4l2",
+                    "-input_format", "mjpeg",
+                    "-video_size", "1280x720",
+                    "-ss", "0.3",
+                    "-i", "/dev/video0",
+                    "-frames:v", "1",
+                    "-update", "1",
+                    str(WEBCAM_TMP)
+                ]
+                subprocess.run(cmd_ffmpeg, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+                if WEBCAM_TMP.exists() and WEBCAM_TMP.stat().st_size > 0:
+                    t = get_system_telemetry()
+                    caption = f"📸 FaceTime HD Sentry Photo | {t['hostname']} | {time.strftime('%H:%M:%S')}"
+                    self.send_photo(WEBCAM_TMP, caption=caption)
+                    WEBCAM_TMP.unlink(missing_ok=True)
+                else:
+                    self.send_message("❌ Webcam capture failed (/dev/video0 busy or not accessible).")
+            except subprocess.TimeoutExpired:
+                self.send_message("⏱️ Webcam capture timed out.")
+            except Exception as e:
+                self.send_message(f"❌ Webcam error: {e}")
+
+        elif cmd in ("/mic", "/record", "/audio"):
+            duration = 5
+            if args:
+                try:
+                    duration = max(2, min(30, int(args[0])))
+                except ValueError:
+                    duration = 5
+
+            self.send_message(f"🎙️ Recording room audio bug ({duration}s)... Please wait.")
+            try:
+                if VOICE_TMP.exists():
+                    VOICE_TMP.unlink()
+
+                cmd_ffmpeg = [
+                    "ffmpeg", "-y",
+                    "-f", "pulse",
+                    "-i", "default",
+                    "-t", str(duration),
+                    "-c:a", "libopus",
+                    str(VOICE_TMP)
+                ]
+                subprocess.run(cmd_ffmpeg, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=duration + 10)
+                if VOICE_TMP.exists() and VOICE_TMP.stat().st_size > 0:
+                    caption = f"🎙️ Room Audio Bug ({duration}s) | {time.strftime('%H:%M:%S')}"
+                    if not self.send_voice(VOICE_TMP, caption=caption):
+                        self.send_document(VOICE_TMP, caption=caption)
+                    VOICE_TMP.unlink(missing_ok=True)
+                else:
+                    self.send_message("❌ Audio recording failed (microphone stream unavailable).")
+            except subprocess.TimeoutExpired:
+                self.send_message("⏱️ Audio recording timed out.")
+            except Exception as e:
+                self.send_message(f"❌ Audio recording error: {e}")
 
         elif cmd == "/lock":
             try:
