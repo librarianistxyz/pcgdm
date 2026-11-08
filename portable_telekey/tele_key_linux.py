@@ -14,7 +14,9 @@ import os
 import sys
 import time
 import json
+import html
 import socket
+import traceback
 import subprocess
 import threading
 import urllib.request
@@ -333,9 +335,9 @@ class TelegramBotBridge:
     def build_dir_view(self, target: Path) -> Tuple[str, Dict[str, Any]]:
         target = target.resolve()
         if not target.exists():
-            return f"❌ Path does not exist: `{target}`", {}
+            return f"❌ Path does not exist: <code>{html.escape(str(target))}</code>", {}
         if not target.is_dir():
-            return f"❌ Path is not a directory: `{target}`", {}
+            return f"❌ Path is not a directory: <code>{html.escape(str(target))}</code>", {}
 
         dirs = []
         files = []
@@ -358,36 +360,36 @@ class TelegramBotBridge:
                     except Exception:
                         files.append((item.name, "?"))
         except PermissionError:
-            return f"❌ Permission denied: `{target}`", {}
+            return f"❌ Permission denied: <code>{html.escape(str(target))}</code>", {}
 
         lines = [
-            f"📁 *File Explorer*",
-            f"📍 Location: `{target}`\n"
+            "📁 <b>File Explorer</b>",
+            f"📍 Location: <code>{html.escape(str(target))}</code>\n"
         ]
         if dirs:
-            lines.append(f"*Directories ({len(dirs)}):*")
+            lines.append(f"<b>Directories ({len(dirs)}):</b>")
             for d in dirs[:12]:
-                lines.append(f"  📁 `{d}/`")
+                lines.append(f"  📁 <code>{html.escape(d)}/</code>")
             if len(dirs) > 12:
-                lines.append(f"  _...and {len(dirs) - 12} more folders_")
+                lines.append(f"  <i>...and {len(dirs) - 12} more folders</i>")
             lines.append("")
 
         if files:
-            lines.append(f"*Files ({len(files)}):*")
+            lines.append(f"<b>Files ({len(files)}):</b>")
             for fname, fsize in files[:16]:
-                lines.append(f"  📄 `{fname}` ({fsize})")
+                lines.append(f"  📄 <code>{html.escape(fname)}</code> ({fsize})")
             if len(files) > 16:
-                lines.append(f"  _...and {len(files) - 16} more files_")
+                lines.append(f"  <i>...and {len(files) - 16} more files</i>")
             lines.append("")
 
         if not dirs and not files:
-            lines.append("_(This folder is empty)_\n")
+            lines.append("<i>(This folder is empty)</i>\n")
 
-        lines.append("💡 *Actions:*")
-        lines.append("• Tap any folder button below to enter")
-        lines.append("• `/get <filename>` to download file to phone")
-        lines.append("• `/cat <filename>` to view text file")
-        lines.append("• `/cd <path>` to jump anywhere")
+        lines.append("💡 <b>Actions:</b>")
+        lines.append("• Tap folder buttons below to enter")
+        lines.append("• <code>/get &lt;filename&gt;</code> to download to phone")
+        lines.append("• <code>/cat &lt;filename&gt;</code> to view text file")
+        lines.append("• <code>/cd &lt;path&gt;</code> to jump anywhere")
 
         keyboard_rows = []
         row = []
@@ -426,6 +428,7 @@ class TelegramBotBridge:
         if not cmd_text:
             return
 
+        parts = cmd_text.split()
         lower = cmd_text.lower()
         if "status" in lower:
             cmd = "/status"
@@ -501,7 +504,7 @@ class TelegramBotBridge:
             if target.exists() and target.is_dir():
                 self.current_dir = target
             text, markup = self.build_dir_view(self.current_dir)
-            self.send_message(text, reply_markup=markup)
+            self.send_message(text, parse_mode="HTML", reply_markup=markup)
 
         elif cmd == "/cd":
             if not args:
@@ -513,10 +516,10 @@ class TelegramBotBridge:
                 if target.exists() and target.is_dir():
                     self.current_dir = target
                 else:
-                    self.send_message(f"❌ Directory not found: `{args[0]}`")
+                    self.send_message(f"❌ Directory not found: <code>{html.escape(args[0])}</code>", parse_mode="HTML")
                     return
             text, markup = self.build_dir_view(self.current_dir)
-            self.send_message(text, reply_markup=markup)
+            self.send_message(text, parse_mode="HTML", reply_markup=markup)
 
         elif cmd == "/cat":
             if not args:
@@ -785,25 +788,25 @@ class TelegramBotBridge:
                             if target.exists() and target.is_dir():
                                 self.current_dir = target
                             text, markup = self.build_dir_view(self.current_dir)
-                            self.send_message(text, reply_markup=markup)
+                            self.send_message(text, parse_mode="HTML", reply_markup=markup)
 
                         elif data == "cd_up":
                             self.answer_callback(cb_id, text="Up one level")
                             if self.current_dir != Path("/"):
                                 self.current_dir = self.current_dir.parent
                             text, markup = self.build_dir_view(self.current_dir)
-                            self.send_message(text, reply_markup=markup)
+                            self.send_message(text, parse_mode="HTML", reply_markup=markup)
 
                         elif data == "cd_home":
                             self.answer_callback(cb_id, text="Home folder")
                             self.current_dir = Path.home()
                             text, markup = self.build_dir_view(self.current_dir)
-                            self.send_message(text, reply_markup=markup)
+                            self.send_message(text, parse_mode="HTML", reply_markup=markup)
 
                         elif data == "cd_refresh":
                             self.answer_callback(cb_id, text="Refreshed")
                             text, markup = self.build_dir_view(self.current_dir)
-                            self.send_message(text, reply_markup=markup)
+                            self.send_message(text, parse_mode="HTML", reply_markup=markup)
                         continue
 
                     # Handle Regular Messages
@@ -821,7 +824,8 @@ class TelegramBotBridge:
 
                     if text:
                         self.handle_command(text)
-            except Exception:
+            except Exception as e:
+                traceback.print_exc()
                 time.sleep(2)
 
     def start(self) -> None:
