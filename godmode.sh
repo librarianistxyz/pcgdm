@@ -464,6 +464,14 @@ case "${1:-status}" in
     alert)
         python3 "$HUD_PY" alert
         ;;
+    root-freedom)
+        "$SCRIPT_DIR/enable_root_freedom.sh"
+        ;;
+    revoke-root)
+        echo "🔒 Revoking Full Root Freedom..."
+        sudo rm -f /etc/sudoers.d/pcgdm-admin
+        echo "✅ Sudoers rule removed. Standard password prompt restored."
+        ;;
     turbo|stealth|cryo|balanced)
         sudo python3 "$CRYO_PY" "$1"
         ;;
@@ -493,6 +501,8 @@ Commands:
   turbo            Override daemon with max 3.1 GHz Turbo + 5500 RPM cooling
   stealth          Override daemon with 2.5 GHz Ice-Cold Battery Saver
   cryo             Override daemon with 6200 RPM max fan blast
+  root-freedom     Enable Option B (passwordless sudo for Telegram God Mode)
+  revoke-root      Revoke Option B and restore password prompt
 EOF
         ;;
 esac

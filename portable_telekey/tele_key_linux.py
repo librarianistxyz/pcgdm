@@ -16,6 +16,7 @@ import time
 import json
 import html
 import socket
+import shutil
 import mimetypes
 import traceback
 import subprocess
@@ -266,6 +267,28 @@ class TelegramBotBridge:
     def send_photo(self, photo_path: Path, caption: str = "") -> bool:
         if not self.token or not self.chat_id or not photo_path.exists():
             return False
+
+        # Prefer curl for streaming reliability
+        if shutil.which("curl"):
+            cmd = [
+                "curl", "-s", "-S",
+                "--connect-timeout", "15",
+                "--max-time", "90",
+                "-F", f"chat_id={self.chat_id}",
+                "-F", f"photo=@{str(photo_path)}",
+            ]
+            if caption:
+                cmd.extend(["-F", f"caption={caption}"])
+            cmd.append(f"{self.api_url}/sendPhoto")
+            try:
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=100)
+                if res.returncode == 0 and '"ok":true' in res.stdout:
+                    return True
+                print(f"[TeleKey] curl send_photo failed: {res.stderr or res.stdout}", file=sys.stderr)
+            except Exception as e:
+                print(f"[TeleKey] curl send_photo error: {e}", file=sys.stderr)
+
+        # Fallback to urllib
         url = f"{self.api_url}/sendPhoto"
         boundary = f"----WebKitFormBoundary{int(time.time()*1000)}"
         body = []
@@ -289,7 +312,7 @@ class TelegramBotBridge:
         payload = b"\r\n".join(body)
         try:
             req = urllib.request.Request(url, data=payload, headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
-            with urllib.request.urlopen(req, timeout=25) as resp:
+            with urllib.request.urlopen(req, timeout=30) as resp:
                 return resp.status == 200
         except Exception as e:
             print(f"[TeleKey] send_photo error: {e}", file=sys.stderr)
@@ -299,12 +322,72 @@ class TelegramBotBridge:
         if not self.token or not self.chat_id or not file_path.exists():
             return False
         if file_path.is_dir():
-            self.send_message(f"❌ `{file_path.name}` is a directory, not a file.")
-            return False
-        if file_path.stat().st_size > 50 * 1024 * 1024:
-            self.send_message(f"❌ File `{file_path.name}` is too large (> 50MB Telegram limit).")
+            self.send_message(f"❌ <code>{html.escape(file_path.name)}</code> is a directory, not a file.", parse_mode="HTML")
             return False
 
+        file_size = file_path.stat().st_size
+        size_mb = file_size / (1024 * 1024)
+
+        # Telegram Bot API hard ceiling: 50MB
+        if file_size > 50 * 1024 * 1024:
+            t = get_system_telemetry()
+            ip = t.get("ip", "localhost")
+            self.send_message(
+                f"⚠️ <b>{html.escape(file_path.name)}</b> is <b>{size_mb:.1f} MB</b>.\n"
+                f"Telegram strictly limits bot uploads to <b>50 MB</b>.\n\n"
+                f"🚀 <b>Direct Wi-Fi Download (Full Speed):</b>\n"
+                f"Download over your local network via AirDrop-Zero:\n"
+                f"👉 <code>http://{ip}:7777</code>",
+                parse_mode="HTML"
+            )
+            return False
+
+        # Pick appropriate icon & caption if none provided
+        ext = file_path.suffix.lower()
+        if not caption:
+            if ext in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"):
+                icon = "🖼️"
+            elif ext in (".mp4", ".mov", ".mkv", ".avi", ".webm", ".flv"):
+                icon = "🎬"
+            elif ext in (".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg"):
+                icon = "🎵"
+            elif ext in (".zip", ".tar", ".gz", ".xz", ".7z", ".bz2", ".rar"):
+                icon = "📦"
+            elif ext in (".pdf",):
+                icon = "📕"
+            else:
+                icon = "📄"
+            caption = f"{icon} {file_path.name} ({size_mb:.1f} MB)"
+
+        # Calculate dynamic timeout: 60s base + 25s per MB (e.g. 10MB => 310s, 40MB => 1060s)
+        timeout_sec = max(90, int(60 + size_mb * 25))
+
+        # Prefer curl for streaming uploads: no RAM bloat, native chunks, SSL resilience
+        if shutil.which("curl"):
+            url = f"{self.api_url}/sendDocument"
+            cmd = [
+                "curl", "-s", "-S",
+                "--connect-timeout", "25",
+                "--max-time", str(timeout_sec),
+                "-F", f"chat_id={self.chat_id}",
+                "-F", f"document=@{str(file_path)}",
+            ]
+            if caption:
+                cmd.extend(["-F", f"caption={caption}"])
+            cmd.append(url)
+            try:
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_sec + 15)
+                if res.returncode == 0 and '"ok":true' in res.stdout:
+                    return True
+                else:
+                    err_output = (res.stderr or res.stdout).strip()
+                    print(f"[TeleKey] curl sendDocument failed: {err_output[:200]}", file=sys.stderr)
+            except subprocess.TimeoutExpired:
+                print(f"[TeleKey] curl sendDocument timed out ({file_path.name})", file=sys.stderr)
+            except Exception as e:
+                print(f"[TeleKey] curl sendDocument error: {e}", file=sys.stderr)
+
+        # Fallback to urllib if curl is unavailable or failed
         mime_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
         url = f"{self.api_url}/sendDocument"
         boundary = f"----WebKitFormBoundary{int(time.time()*1000)}"
@@ -322,17 +405,21 @@ class TelegramBotBridge:
         body.append(f'Content-Disposition: form-data; name="document"; filename="{file_path.name}"'.encode("utf-8"))
         body.append(f"Content-Type: {mime_type}".encode("utf-8"))
         body.append(b"")
-        body.append(file_path.read_bytes())
+        try:
+            body.append(file_path.read_bytes())
+        except Exception as e:
+            print(f"[TeleKey] read_bytes failed: {e}", file=sys.stderr)
+            return False
         body.append(f"--{boundary}--".encode("utf-8"))
         body.append(b"")
 
         payload = b"\r\n".join(body)
         try:
             req = urllib.request.Request(url, data=payload, headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
-            with urllib.request.urlopen(req, timeout=120) as resp:
+            with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
                 return resp.status == 200
         except Exception as e:
-            print(f"[TeleKey] send_document error: {e}", file=sys.stderr)
+            print(f"[TeleKey] urllib send_document error: {e}", file=sys.stderr)
             return False
 
     def build_dir_view(self, target: Path) -> Tuple[str, Dict[str, Any]]:
@@ -506,6 +593,12 @@ class TelegramBotBridge:
         elif "eject" in lower:
             cmd = "/eject"
             args = []
+        elif lower in ("/update", "update", "apt update"):
+            cmd = "/update"
+            args = []
+        elif lower in ("/upgrade", "upgrade", "apt upgrade"):
+            cmd = "/upgrade"
+            args = []
         elif "help" in lower or "start" in lower:
             cmd = "/help"
             args = []
@@ -529,7 +622,9 @@ class TelegramBotBridge:
                 f"• `/ring` - Ring Galaxy S9+\n"
                 f"• `/clip` - Get Clipboard Text\n"
                 f"• `/eject` - Flush Caches & Safe Unmount USB\n"
-                f"• `/cmd <bash>` - Run Shell Command\n"
+                f"• `/update` - Check for Xubuntu updates (apt update)\n"
+                f"• `/upgrade` - Install system updates (apt upgrade -y)\n"
+                f"• `/cmd <bash>` - Run Shell Command (supports sudo)\n"
                 f"• `/cryo <turbo|stealth>` - Switch Power Profile\n"
             )
             self.send_message(msg)
@@ -591,9 +686,11 @@ class TelegramBotBridge:
             if not target.exists():
                 self.send_message(f"❌ File not found: `{target.name}`")
                 return
-            self.send_message(f"📤 Uploading `{target.name}` to Telegram...")
-            if not self.send_document(target, caption=f"📄 {target.name} ({target.stat().st_size} bytes)"):
-                self.send_message("❌ Upload failed.")
+            f_size_mb = target.stat().st_size / (1024 * 1024)
+            self.send_message(f"📤 Uploading <b>{html.escape(target.name)}</b> ({f_size_mb:.1f} MB)... Please wait.", parse_mode="HTML")
+            if not self.send_document(target):
+                if f_size_mb <= 50:
+                    self.send_message(f"❌ Upload failed for `{target.name}`.")
 
         elif cmd in ("/find", "/search"):
             if not args:
@@ -791,6 +888,62 @@ class TelegramBotBridge:
             except Exception as e:
                 self.send_message(f"❌ Execution error: {e}")
 
+        elif cmd == "/update":
+            self.send_message("🔄 Checking for Xubuntu system updates (`sudo apt update`)... Please wait.")
+            try:
+                env = os.environ.copy()
+                env["DEBIAN_FRONTEND"] = "noninteractive"
+                proc = subprocess.run(
+                    "sudo apt update",
+                    shell=True,
+                    executable="/bin/bash",
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    env=env,
+                    timeout=180
+                )
+                output = proc.stdout.strip()
+                if "can be upgraded" in output.lower():
+                    self.send_message(f"📦 *Updates Available:*\n```\n{output[-1200:]}\n```\n\n💡 Send `/upgrade` to install all updates now!")
+                else:
+                    self.send_message(f"✅ *System is Up to Date:*\n```\n{output[-1000:]}\n```")
+            except subprocess.TimeoutExpired:
+                self.send_message("⏱️ Update check timed out.")
+            except Exception as e:
+                self.send_message(f"❌ Update check error: {e}")
+
+        elif cmd == "/upgrade":
+            self.send_message("🚀 Upgrading Xubuntu packages (`sudo apt upgrade -y`)... This may take several minutes.")
+            try:
+                env = os.environ.copy()
+                env["DEBIAN_FRONTEND"] = "noninteractive"
+                proc = subprocess.run(
+                    "sudo apt upgrade -y",
+                    shell=True,
+                    executable="/bin/bash",
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    env=env,
+                    timeout=900
+                )
+                output = proc.stdout.strip()
+                status_emoji = "✅" if proc.returncode == 0 else f"⚠️ (Exit code: {proc.returncode})"
+                if len(output) > 3500:
+                    summary = output[-2500:]
+                    self.send_message(f"{status_emoji} *Upgrade Complete:*\n```\n{summary}\n```")
+                    log_tmp = Path("/tmp/apt_upgrade.log")
+                    log_tmp.write_text(proc.stdout, encoding="utf-8")
+                    self.send_document(log_tmp, caption="📄 Full APT Upgrade Log")
+                    log_tmp.unlink(missing_ok=True)
+                else:
+                    self.send_message(f"{status_emoji} *Upgrade Complete:*\n```\n{output}\n```")
+            except subprocess.TimeoutExpired:
+                self.send_message("⏱️ Upgrade timed out after 15 minutes.")
+            except Exception as e:
+                self.send_message(f"❌ Upgrade error: {e}")
+
         else:
             self.send_message(f"❓ Unknown command: `{cmd}`. Type `/help` for options.")
 
@@ -873,9 +1026,12 @@ class TelegramBotBridge:
                             f_key = data.split("dl:", 1)[1]
                             target_file = self.file_cache.get(f_key)
                             if target_file and target_file.exists():
-                                self.answer_callback(cb_id, text=f"Uploading {target_file.name}...")
-                                self.send_message(f"📤 Uploading <b>{html.escape(target_file.name)}</b> to your phone...", parse_mode="HTML")
-                                self.send_document(target_file, caption=f"📄 {target_file.name}")
+                                f_size_mb = target_file.stat().st_size / (1024 * 1024)
+                                self.answer_callback(cb_id, text=f"Uploading {target_file.name} ({f_size_mb:.1f} MB)...")
+                                self.send_message(f"📤 Uploading <b>{html.escape(target_file.name)}</b> ({f_size_mb:.1f} MB)... Please wait.", parse_mode="HTML")
+                                if not self.send_document(target_file):
+                                    if f_size_mb <= 50:
+                                        self.send_message(f"❌ Failed to upload <b>{html.escape(target_file.name)}</b>. Network connection timed out.", parse_mode="HTML")
                             else:
                                 self.answer_callback(cb_id, text="File not found or expired.")
                         continue
