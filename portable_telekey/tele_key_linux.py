@@ -329,7 +329,7 @@ class TelegramBotBridge:
         payload = b"\r\n".join(body)
         try:
             req = urllib.request.Request(url, data=payload, headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
-            with urllib.request.urlopen(req, timeout=60) as resp:
+            with urllib.request.urlopen(req, timeout=120) as resp:
                 return resp.status == 200
         except Exception as e:
             print(f"[TeleKey] send_document error: {e}", file=sys.stderr)
@@ -743,27 +743,51 @@ class TelegramBotBridge:
 
         elif cmd == "/cmd":
             if not args:
-                self.send_message("Usage: `/cmd <bash command>`")
+                self.send_message("Usage: `/cmd <bash command>`\nExample: `/cmd git clone https://github.com/...`")
                 return
             command = " ".join(args)
+
+            # Determine dynamic timeout based on command workload
+            long_workload_triggers = ("git", "apt", "npm", "pip", "curl", "wget", "docker", "make", "build", "tar", "zip")
+            timeout_sec = 300 if any(t in command.lower() for t in long_workload_triggers) else 60
+
+            self.send_message(f"⏳ Executing: `{command[:70]}`\n📍 Directory: `{self.current_dir}`\n⏱️ Timeout: {timeout_sec}s...")
+
             try:
+                env = os.environ.copy()
+                env["DEBIAN_FRONTEND"] = "noninteractive"
+                env["PATH"] = f"{Path.home()}/.local/bin:{Path.home()}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:" + env.get("PATH", "")
+
                 proc = subprocess.run(
                     command,
                     shell=True,
+                    cwd=str(self.current_dir),
                     executable="/bin/bash",
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
-                    timeout=15
+                    env=env,
+                    timeout=timeout_sec
                 )
                 output = proc.stdout.strip()
                 if not output:
                     output = "[Command executed successfully with no output]"
+
+                status_emoji = "✅" if proc.returncode == 0 else f"⚠️ (Exit code: {proc.returncode})"
+
                 if len(output) > 3500:
-                    output = output[:3500] + "\n...[Output Truncated]"
-                self.send_message(f"⚙️ *Output (`{command[:60]}`):*\n```\n{output}\n```")
+                    summary = output[:3000] + f"\n\n...[Truncated - total {len(output)} bytes]"
+                    self.send_message(f"{status_emoji} *Output (`{command[:60]}`):*\n```\n{summary}\n```")
+                    # Save and send full log file
+                    log_tmp = Path("/tmp/cmd_output.log")
+                    log_tmp.write_text(proc.stdout, encoding="utf-8")
+                    self.send_document(log_tmp, caption=f"📄 Full output for: {command[:40]}")
+                    log_tmp.unlink(missing_ok=True)
+                else:
+                    self.send_message(f"{status_emoji} *Output (`{command[:60]}`):*\n```\n{output}\n```")
+
             except subprocess.TimeoutExpired:
-                self.send_message("⏱️ Command timed out after 15 seconds.")
+                self.send_message(f"⏱️ Command timed out after {timeout_sec} seconds.")
             except Exception as e:
                 self.send_message(f"❌ Execution error: {e}")
 
