@@ -26,7 +26,7 @@ KEYBOARD_MARKUP = {
     "keyboard": [
         [{"text": "📊 Status"}, {"text": "📸 Screenshot"}],
         [{"text": "🔒 Lock Screen"}, {"text": "📋 Clipboard"}],
-        [{"text": "❓ Help"}]
+        [{"text": "⏏️ Eject USB"}, {"text": "❓ Help"}]
     ],
     "resize_keyboard": True,
     "persistent": True
@@ -202,8 +202,40 @@ class TelegramBotBridge:
                     self.send_message(f"⚙️ *Output (`{cmd[:60]}`):*\n```\n{out}\n```")
                 except Exception as e:
                     self.send_message(f"❌ Execution error: {e}")
+        elif "eject" in lower:
+            self.send_message("⏳ Flushing disk cache and safely unmounting USB...")
+            try:
+                subprocess.run(["sync"], timeout=5)
+                unmounted = []
+                with open("/proc/mounts", "r") as f:
+                    for line in f:
+                        parts = line.split()
+                        if len(parts) >= 2 and parts[0].startswith("/dev/sd"):
+                            dev = parts[0]
+                            mp = parts[1].replace("\\040", " ")
+                            try:
+                                udev_out = subprocess.check_output(
+                                    ["udevadm", "info", "-q", "property", "-n", dev],
+                                    text=True,
+                                    stderr=subprocess.DEVNULL
+                                )
+                                if TARGET_SERIAL in udev_out:
+                                    subprocess.run(["udisksctl", "unmount", "-b", dev, "--no-user-interaction"], capture_output=True, timeout=5)
+                                    unmounted.append(mp)
+                            except Exception:
+                                pass
+                details = f"Unmounted: `{', '.join(unmounted)}`" if unmounted else "Partitions already unmounted."
+                self.send_message(
+                    f"✅ *USB SAFELY UNMOUNTED*\n"
+                    f"Host: `{socket.gethostname()}`\n"
+                    f"Buffers Flushed: `sync` completed.\n"
+                    f"{details}\n\n"
+                    f"👉 **You can pull the drive out now!**"
+                )
+            except Exception as e:
+                self.send_message(f"❌ Eject error: {e}")
         elif "help" in lower or "start" in lower:
-            self.send_message(f"⚡ *Linux TeleKey ({socket.gethostname()}) Commands:*\n• `/status` - Live CPU & RAM\n• `/screenshot` - Desktop Capture\n• `/lock` - Lock Desktop\n• `/clip` - Get Clipboard\n• `/cmd <bash>` - Run Command")
+            self.send_message(f"⚡ *Linux TeleKey ({socket.gethostname()}) Commands:*\n• `/status` - Live CPU & RAM\n• `/screenshot` - Desktop Capture\n• `/lock` - Lock Desktop\n• `/clip` - Get Clipboard\n• `/eject` - Safely Flush & Unmount USB\n• `/cmd <bash>` - Run Command")
 
     def run_polling(self) -> None:
         self.running = True

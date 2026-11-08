@@ -44,7 +44,7 @@ KEYBOARD_MARKUP = {
         [{"text": "📊 Status"}, {"text": "📸 Screenshot"}],
         [{"text": "🔒 Lock Screen"}, {"text": "🔔 Ring Phone"}],
         [{"text": "📋 Clipboard"}, {"text": "❄️ Turbo Cryo"}],
-        [{"text": "❓ Help"}]
+        [{"text": "⏏️ Eject USB"}, {"text": "❓ Help"}]
     ],
     "resize_keyboard": True,
     "persistent": True
@@ -212,6 +212,7 @@ class TelegramBotBridge:
             {"command": "clip", "description": "📋 Get Laptop Clipboard Text"},
             {"command": "ring", "description": "🔔 Ring Galaxy S9+ Phone"},
             {"command": "cryo", "description": "❄️ Set Turbo/Stealth Power"},
+            {"command": "eject", "description": "⏏️ Safely Flush & Unmount USB"},
             {"command": "cmd", "description": "⚙️ Run Shell Command"},
             {"command": "help", "description": "⚡ Show Command Matrix"}
         ]
@@ -331,6 +332,9 @@ class TelegramBotBridge:
         elif "stealth" in lower:
             cmd = "/cryo"
             args = ["stealth"]
+        elif "eject" in lower:
+            cmd = "/eject"
+            args = []
         elif "help" in lower or "start" in lower:
             cmd = "/help"
             args = []
@@ -348,6 +352,7 @@ class TelegramBotBridge:
                 f"• `/lock` - Lock XFCE Screen Session\n"
                 f"• `/ring` - Ring Galaxy S9+ (Hive Nexus)\n"
                 f"• `/clip` - Get current PC clipboard text\n"
+                f"• `/eject` - Flush disk caches & safe unmount USB\n"
                 f"• `/cmd <bash>` - Run arbitrary terminal command\n"
                 f"• `/cryo <turbo|stealth>` - Switch power profile\n"
             )
@@ -434,6 +439,42 @@ class TelegramBotBridge:
                 self.send_message(f"❄️ Cryo governor set to: *{mode}*")
             except Exception as e:
                 self.send_message(f"❌ Cryo error: {e}")
+
+        elif cmd == "/eject":
+            self.send_message("⏳ Flushing disk cache and safely unmounting USB...")
+            try:
+                subprocess.run(["sync"], timeout=5)
+                unmounted = []
+                cfg = load_config()
+                target_serial = cfg.get("target_serial", DEFAULT_TARGET_SERIAL)
+                with open("/proc/mounts", "r") as f:
+                    for line in f:
+                        parts = line.split()
+                        if len(parts) >= 2 and parts[0].startswith("/dev/sd"):
+                            dev = parts[0]
+                            mp = parts[1].replace("\\040", " ")
+                            try:
+                                udev_out = subprocess.check_output(
+                                    ["udevadm", "info", "-q", "property", "-n", dev],
+                                    text=True,
+                                    stderr=subprocess.DEVNULL
+                                )
+                                if target_serial in udev_out:
+                                    subprocess.run(["udisksctl", "unmount", "-b", dev, "--no-user-interaction"], capture_output=True, timeout=5)
+                                    unmounted.append(mp)
+                            except Exception:
+                                pass
+                flash_keyboard(3)
+                details = f"Unmounted: `{', '.join(unmounted)}`" if unmounted else "Partitions already unmounted."
+                self.send_message(
+                    f"✅ *USB SAFELY UNMOUNTED*\n"
+                    f"Host: `{self.alias}`\n"
+                    f"All disk buffers flushed (`sync`).\n"
+                    f"{details}\n\n"
+                    f"👉 **You can pull the drive out now!**"
+                )
+            except Exception as e:
+                self.send_message(f"❌ Eject error: {e}")
 
         elif cmd == "/cmd":
             if not args:

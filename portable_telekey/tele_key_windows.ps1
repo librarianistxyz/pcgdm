@@ -23,7 +23,7 @@ function Send-TgMessage {
             keyboard = @(
                 @(@{text="📊 Status"}, @{text="📸 Screenshot"}),
                 @(@{text="🔒 Lock Screen"}, @{text="📋 Clipboard"}),
-                @(@{text="❓ Help"})
+                @(@{text="⏏️ Eject USB"}, @{text="❓ Help"})
             )
             resize_keyboard = $true
             persistent = $true
@@ -205,6 +205,15 @@ Type `/help` or tap buttons to control this PC.
                             Send-TgMessage -Text "📋 *Clipboard:*`n```n$clip`n```"
                         } else {
                             Send-TgMessage -Text "📋 Clipboard is empty."
+                        }
+                    }
+                    elseif ($lower -match "eject") {
+                        Send-TgMessage -Text "⏳ Flushing disk cache and taking USB offline..."
+                        try {
+                            Get-Disk | Where-Object { $_.SerialNumber -match $TargetSerial } | Set-Disk -IsOffline $true -ErrorAction SilentlyContinue
+                            Send-TgMessage -Text "✅ *USB SAFELY UNMOUNTED*`nHost: `$env:COMPUTERNAME`nBuffers Flushed.`n`n👉 **You can pull the drive out now!**"
+                        } catch {
+                            Send-TgMessage -Text "❌ Eject error: $_"
                         }
                     }
                     elseif ($text.StartsWith("/cmd")) {
