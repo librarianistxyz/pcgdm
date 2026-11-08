@@ -16,6 +16,7 @@ import time
 import json
 import html
 import socket
+import mimetypes
 import traceback
 import subprocess
 import threading
@@ -193,6 +194,7 @@ class TelegramBotBridge:
         self.last_update_id = 0
         self.worker_thread: Optional[threading.Thread] = None
         self.current_dir: Path = Path.home()
+        self.file_cache: Dict[str, Path] = {}
         self.clear_webhook()
         self.register_commands()
 
@@ -303,6 +305,7 @@ class TelegramBotBridge:
             self.send_message(f"❌ File `{file_path.name}` is too large (> 50MB Telegram limit).")
             return False
 
+        mime_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
         url = f"{self.api_url}/sendDocument"
         boundary = f"----WebKitFormBoundary{int(time.time()*1000)}"
         body = []
@@ -317,7 +320,7 @@ class TelegramBotBridge:
             body.append(caption.encode("utf-8"))
         body.append(f"--{boundary}".encode("utf-8"))
         body.append(f'Content-Disposition: form-data; name="document"; filename="{file_path.name}"'.encode("utf-8"))
-        body.append(b"Content-Type: application/octet-stream")
+        body.append(f"Content-Type: {mime_type}".encode("utf-8"))
         body.append(b"")
         body.append(file_path.read_bytes())
         body.append(f"--{boundary}--".encode("utf-8"))
@@ -326,7 +329,7 @@ class TelegramBotBridge:
         payload = b"\r\n".join(body)
         try:
             req = urllib.request.Request(url, data=payload, headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
-            with urllib.request.urlopen(req, timeout=45) as resp:
+            with urllib.request.urlopen(req, timeout=60) as resp:
                 return resp.status == 200
         except Exception as e:
             print(f"[TeleKey] send_document error: {e}", file=sys.stderr)
@@ -356,51 +359,85 @@ class TelegramBotBridge:
                             fsize = f"{sz // 1024}KB"
                         else:
                             fsize = f"{sz // (1024*1024)}MB"
-                        files.append((item.name, fsize))
+                        files.append((item, item.name, fsize))
                     except Exception:
-                        files.append((item.name, "?"))
+                        files.append((item, item.name, "?"))
         except PermissionError:
             return f"❌ Permission denied: <code>{html.escape(str(target))}</code>", {}
 
         lines = [
-            "📁 <b>File Explorer</b>",
+            "📁 <b>File Explorer & Downloader</b>",
             f"📍 Location: <code>{html.escape(str(target))}</code>\n"
         ]
         if dirs:
             lines.append(f"<b>Directories ({len(dirs)}):</b>")
-            for d in dirs[:12]:
+            for d in dirs[:10]:
                 lines.append(f"  📁 <code>{html.escape(d)}/</code>")
-            if len(dirs) > 12:
-                lines.append(f"  <i>...and {len(dirs) - 12} more folders</i>")
+            if len(dirs) > 10:
+                lines.append(f"  <i>...and {len(dirs) - 10} more folders</i>")
             lines.append("")
 
         if files:
             lines.append(f"<b>Files ({len(files)}):</b>")
-            for fname, fsize in files[:16]:
+            for fpath, fname, fsize in files[:12]:
                 lines.append(f"  📄 <code>{html.escape(fname)}</code> ({fsize})")
-            if len(files) > 16:
-                lines.append(f"  <i>...and {len(files) - 16} more files</i>")
+            if len(files) > 12:
+                lines.append(f"  <i>...and {len(files) - 12} more files</i>")
             lines.append("")
 
         if not dirs and not files:
             lines.append("<i>(This folder is empty)</i>\n")
 
-        lines.append("💡 <b>Actions:</b>")
-        lines.append("• Tap folder buttons below to enter")
-        lines.append("• <code>/get &lt;filename&gt;</code> to download to phone")
-        lines.append("• <code>/cat &lt;filename&gt;</code> to view text file")
-        lines.append("• <code>/cd &lt;path&gt;</code> to jump anywhere")
+        lines.append("💡 <b>Tap any button below:</b>")
+        lines.append("• 📁 Tap a folder to enter")
+        lines.append("• 📥 Tap a file to <b>download directly to phone</b>")
 
         keyboard_rows = []
-        row = []
-        for d in dirs[:8]:
-            row.append({"text": f"📁 {d[:15]}", "callback_data": f"cd:{d[:25]}"})
-            if len(row) == 2:
-                keyboard_rows.append(row)
-                row = []
-        if row:
-            keyboard_rows.append(row)
 
+        # 1. Directory navigation buttons (2 columns)
+        if dirs:
+            row = []
+            for d in dirs[:8]:
+                row.append({"text": f"📁 {d[:14]}", "callback_data": f"cd:{d[:25]}"})
+                if len(row) == 2:
+                    keyboard_rows.append(row)
+                    row = []
+            if row:
+                keyboard_rows.append(row)
+
+        # 2. Clickable File Download buttons! (2 columns for neat fit)
+        self.file_cache = {}
+        if files:
+            row = []
+            for idx, (fpath, fname, fsize) in enumerate(files[:8]):
+                f_key = f"f{idx}"
+                self.file_cache[f_key] = fpath
+
+                ext = fpath.suffix.lower()
+                if ext == ".pdf":
+                    icon = "📕"
+                elif ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"):
+                    icon = "🖼️"
+                elif ext in (".zip", ".tar", ".gz", ".7z", ".rar", ".iso"):
+                    icon = "📦"
+                elif ext in (".mp4", ".mkv", ".mov", ".avi"):
+                    icon = "🎬"
+                elif ext in (".mp3", ".wav", ".flac", ".ogg"):
+                    icon = "🎵"
+                elif ext in (".doc", ".docx", ".odt", ".txt", ".md", ".json", ".py", ".sh"):
+                    icon = "📄"
+                else:
+                    icon = "💾"
+
+                label = f"{icon} {fname[:13]} ({fsize})"
+                row.append({"text": label, "callback_data": f"dl:{f_key}"})
+                if len(row) == 2:
+                    keyboard_rows.append(row)
+                    row = []
+            if row:
+                keyboard_rows.append(row)
+
+        # 3. Nav row
         nav_row = []
         if target != Path.home():
             nav_row.append({"text": "⬆️ Up", "callback_data": "cd_up"})
@@ -807,6 +844,16 @@ class TelegramBotBridge:
                             self.answer_callback(cb_id, text="Refreshed")
                             text, markup = self.build_dir_view(self.current_dir)
                             self.send_message(text, parse_mode="HTML", reply_markup=markup)
+
+                        elif data.startswith("dl:"):
+                            f_key = data.split("dl:", 1)[1]
+                            target_file = self.file_cache.get(f_key)
+                            if target_file and target_file.exists():
+                                self.answer_callback(cb_id, text=f"Uploading {target_file.name}...")
+                                self.send_message(f"📤 Uploading <b>{html.escape(target_file.name)}</b> to your phone...", parse_mode="HTML")
+                                self.send_document(target_file, caption=f"📄 {target_file.name}")
+                            else:
+                                self.answer_callback(cb_id, text="File not found or expired.")
                         continue
 
                     # Handle Regular Messages
