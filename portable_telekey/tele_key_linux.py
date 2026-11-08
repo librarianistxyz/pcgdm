@@ -35,7 +35,7 @@ DEFAULT_DISK_BY_ID = "/dev/disk/by-id/usb-Generic_Flash_Disk_0377291581335169734
 KEYBOARD_MARKUP = {
     "keyboard": [
         [{"text": "📊 Status"}, {"text": "📸 Screenshot"}],
-        [{"text": "🔒 Lock Screen"}, {"text": "🔔 Ring Phone"}],
+        [{"text": "📁 Files"}, {"text": "🔒 Lock Screen"}],
         [{"text": "📋 Clipboard"}, {"text": "❄️ Turbo Cryo"}],
         [{"text": "⏏️ Eject USB"}, {"text": "❓ Help"}]
     ],
@@ -190,6 +190,7 @@ class TelegramBotBridge:
         self.running = False
         self.last_update_id = 0
         self.worker_thread: Optional[threading.Thread] = None
+        self.current_dir: Path = Path.home()
         self.clear_webhook()
         self.register_commands()
 
@@ -204,11 +205,13 @@ class TelegramBotBridge:
     def register_commands(self) -> None:
         commands = [
             {"command": "status", "description": "📊 Live CPU, RAM, Battery & Temps"},
+            {"command": "files", "description": "📁 Browse Folders & Files"},
             {"command": "screenshot", "description": "📸 Snap MacBook Desktop Photo"},
+            {"command": "get", "description": "📥 Download File to Phone (/get <file>)"},
+            {"command": "cat", "description": "📄 View Text File (/cat <file>)"},
             {"command": "lock", "description": "🔒 Lock Laptop Session"},
             {"command": "clip", "description": "📋 Get Laptop Clipboard Text"},
             {"command": "ring", "description": "🔔 Ring Galaxy S9+ Phone"},
-            {"command": "cryo", "description": "❄️ Set Turbo/Stealth Power"},
             {"command": "eject", "description": "⏏️ Safely Flush & Unmount USB"},
             {"command": "cmd", "description": "⚙️ Run Shell Command"},
             {"command": "help", "description": "⚡ Show Command Matrix"}
@@ -288,6 +291,124 @@ class TelegramBotBridge:
             print(f"[TeleKey] send_photo error: {e}", file=sys.stderr)
             return False
 
+    def send_document(self, file_path: Path, caption: str = "") -> bool:
+        if not self.token or not self.chat_id or not file_path.exists():
+            return False
+        if file_path.is_dir():
+            self.send_message(f"❌ `{file_path.name}` is a directory, not a file.")
+            return False
+        if file_path.stat().st_size > 50 * 1024 * 1024:
+            self.send_message(f"❌ File `{file_path.name}` is too large (> 50MB Telegram limit).")
+            return False
+
+        url = f"{self.api_url}/sendDocument"
+        boundary = f"----WebKitFormBoundary{int(time.time()*1000)}"
+        body = []
+        body.append(f"--{boundary}".encode("utf-8"))
+        body.append(f'Content-Disposition: form-data; name="chat_id"'.encode("utf-8"))
+        body.append(b"")
+        body.append(str(self.chat_id).encode("utf-8"))
+        if caption:
+            body.append(f"--{boundary}".encode("utf-8"))
+            body.append(f'Content-Disposition: form-data; name="caption"'.encode("utf-8"))
+            body.append(b"")
+            body.append(caption.encode("utf-8"))
+        body.append(f"--{boundary}".encode("utf-8"))
+        body.append(f'Content-Disposition: form-data; name="document"; filename="{file_path.name}"'.encode("utf-8"))
+        body.append(b"Content-Type: application/octet-stream")
+        body.append(b"")
+        body.append(file_path.read_bytes())
+        body.append(f"--{boundary}--".encode("utf-8"))
+        body.append(b"")
+
+        payload = b"\r\n".join(body)
+        try:
+            req = urllib.request.Request(url, data=payload, headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+            with urllib.request.urlopen(req, timeout=45) as resp:
+                return resp.status == 200
+        except Exception as e:
+            print(f"[TeleKey] send_document error: {e}", file=sys.stderr)
+            return False
+
+    def build_dir_view(self, target: Path) -> Tuple[str, Dict[str, Any]]:
+        target = target.resolve()
+        if not target.exists():
+            return f"❌ Path does not exist: `{target}`", {}
+        if not target.is_dir():
+            return f"❌ Path is not a directory: `{target}`", {}
+
+        dirs = []
+        files = []
+        try:
+            for item in sorted(target.iterdir()):
+                if item.name.startswith("."):
+                    continue
+                if item.is_dir():
+                    dirs.append(item.name)
+                else:
+                    try:
+                        sz = item.stat().st_size
+                        if sz < 1024:
+                            fsize = f"{sz}B"
+                        elif sz < 1024 * 1024:
+                            fsize = f"{sz // 1024}KB"
+                        else:
+                            fsize = f"{sz // (1024*1024)}MB"
+                        files.append((item.name, fsize))
+                    except Exception:
+                        files.append((item.name, "?"))
+        except PermissionError:
+            return f"❌ Permission denied: `{target}`", {}
+
+        lines = [
+            f"📁 *File Explorer*",
+            f"📍 Location: `{target}`\n"
+        ]
+        if dirs:
+            lines.append(f"*Directories ({len(dirs)}):*")
+            for d in dirs[:12]:
+                lines.append(f"  📁 `{d}/`")
+            if len(dirs) > 12:
+                lines.append(f"  _...and {len(dirs) - 12} more folders_")
+            lines.append("")
+
+        if files:
+            lines.append(f"*Files ({len(files)}):*")
+            for fname, fsize in files[:16]:
+                lines.append(f"  📄 `{fname}` ({fsize})")
+            if len(files) > 16:
+                lines.append(f"  _...and {len(files) - 16} more files_")
+            lines.append("")
+
+        if not dirs and not files:
+            lines.append("_(This folder is empty)_\n")
+
+        lines.append("💡 *Actions:*")
+        lines.append("• Tap any folder button below to enter")
+        lines.append("• `/get <filename>` to download file to phone")
+        lines.append("• `/cat <filename>` to view text file")
+        lines.append("• `/cd <path>` to jump anywhere")
+
+        keyboard_rows = []
+        row = []
+        for d in dirs[:8]:
+            row.append({"text": f"📁 {d[:15]}", "callback_data": f"cd:{d[:25]}"})
+            if len(row) == 2:
+                keyboard_rows.append(row)
+                row = []
+        if row:
+            keyboard_rows.append(row)
+
+        nav_row = []
+        if target != Path.home():
+            nav_row.append({"text": "⬆️ Up", "callback_data": "cd_up"})
+            nav_row.append({"text": "🏠 Home", "callback_data": "cd_home"})
+        else:
+            nav_row.append({"text": "🔄 Refresh", "callback_data": "cd_refresh"})
+        keyboard_rows.append(nav_row)
+
+        return "\n".join(lines), {"inline_keyboard": keyboard_rows}
+
     def get_updates(self, offset: int = 0, timeout: int = 15) -> List[Dict[str, Any]]:
         url = f"{self.api_url}/getUpdates?offset={offset}&timeout={timeout}"
         try:
@@ -309,6 +430,21 @@ class TelegramBotBridge:
         if "status" in lower:
             cmd = "/status"
             args = []
+        elif "files" in lower or lower in ("ls", "dir", "/ls", "/files", "browse", "📁 files"):
+            cmd = "/files"
+            args = parts[1:] if len(parts) > 1 else []
+        elif lower.startswith("cd ") or lower == "cd":
+            cmd = "/cd"
+            args = parts[1:] if len(parts) > 1 else []
+        elif lower.startswith("cat ") or lower.startswith("view "):
+            cmd = "/cat"
+            args = parts[1:] if len(parts) > 1 else []
+        elif lower.startswith("get ") or lower.startswith("download "):
+            cmd = "/get"
+            args = parts[1:] if len(parts) > 1 else []
+        elif lower.startswith("find ") or lower.startswith("search "):
+            cmd = "/find"
+            args = parts[1:] if len(parts) > 1 else []
         elif "screenshot" in lower or "photo" in lower:
             cmd = "/screenshot"
             args = []
@@ -342,16 +478,113 @@ class TelegramBotBridge:
             msg = (
                 f"⚡ *GodMode TeleKey Control Matrix*\n"
                 f"Host: `{self.alias}`\n\n"
+                f"• `/files` or `/ls` - Interactive Folder Explorer\n"
+                f"• `/cd <folder>` - Change Directory\n"
+                f"• `/cat <file>` - View Text / Code File\n"
+                f"• `/get <file>` - Download File to Phone\n"
+                f"• `/find <name>` - Search for Files\n"
                 f"• `/status` - Live CPU, RAM, Battery & Thermals\n"
                 f"• `/screenshot` - Instant Desktop Photo\n"
-                f"• `/lock` - Lock XFCE Screen Session\n"
-                f"• `/ring` - Ring Galaxy S9+ (Hive Nexus)\n"
-                f"• `/clip` - Get current PC clipboard text\n"
-                f"• `/eject` - Flush disk caches & safe unmount USB\n"
-                f"• `/cmd <bash>` - Run arbitrary terminal command\n"
-                f"• `/cryo <turbo|stealth>` - Switch power profile\n"
+                f"• `/lock` - Lock Screen Session\n"
+                f"• `/ring` - Ring Galaxy S9+\n"
+                f"• `/clip` - Get Clipboard Text\n"
+                f"• `/eject` - Flush Caches & Safe Unmount USB\n"
+                f"• `/cmd <bash>` - Run Shell Command\n"
+                f"• `/cryo <turbo|stealth>` - Switch Power Profile\n"
             )
             self.send_message(msg)
+
+        elif cmd in ("/files", "/ls"):
+            target = Path(args[0]).expanduser() if args else self.current_dir
+            if not target.is_absolute():
+                target = (self.current_dir / target).resolve()
+            if target.exists() and target.is_dir():
+                self.current_dir = target
+            text, markup = self.build_dir_view(self.current_dir)
+            self.send_message(text, reply_markup=markup)
+
+        elif cmd == "/cd":
+            if not args:
+                self.current_dir = Path.home()
+            else:
+                target = Path(args[0]).expanduser()
+                if not target.is_absolute():
+                    target = (self.current_dir / target).resolve()
+                if target.exists() and target.is_dir():
+                    self.current_dir = target
+                else:
+                    self.send_message(f"❌ Directory not found: `{args[0]}`")
+                    return
+            text, markup = self.build_dir_view(self.current_dir)
+            self.send_message(text, reply_markup=markup)
+
+        elif cmd == "/cat":
+            if not args:
+                self.send_message("Usage: `/cat <filename>`")
+                return
+            target = Path(" ".join(args)).expanduser()
+            if not target.is_absolute():
+                target = (self.current_dir / target).resolve()
+            if not target.exists():
+                self.send_message(f"❌ File not found: `{target.name}`")
+                return
+            if target.is_dir():
+                self.send_message(f"❌ `{target.name}` is a folder, use `/files` to browse it.")
+                return
+            try:
+                content = target.read_text(encoding="utf-8", errors="replace")
+                if not content:
+                    content = "[File is empty]"
+                if len(content) > 3500:
+                    content = content[:3500] + "\n\n...[Truncated - use /get to download full file]"
+                self.send_message(f"📄 *`{target.name}`:*\n```\n{content}\n```")
+            except Exception as e:
+                self.send_message(f"❌ Error reading file: {e}")
+
+        elif cmd in ("/get", "/download"):
+            if not args:
+                self.send_message("Usage: `/get <filename>`")
+                return
+            target = Path(" ".join(args)).expanduser()
+            if not target.is_absolute():
+                target = (self.current_dir / target).resolve()
+            if not target.exists():
+                self.send_message(f"❌ File not found: `{target.name}`")
+                return
+            self.send_message(f"📤 Uploading `{target.name}` to Telegram...")
+            if not self.send_document(target, caption=f"📄 {target.name} ({target.stat().st_size} bytes)"):
+                self.send_message("❌ Upload failed.")
+
+        elif cmd in ("/find", "/search"):
+            if not args:
+                self.send_message("Usage: `/find <search_query>`")
+                return
+            query = args[0]
+            try:
+                proc = subprocess.run(
+                    f"find '{self.current_dir}' -maxdepth 3 -iname '*{query}*' 2>/dev/null | head -n 20",
+                    shell=True,
+                    stdout=subprocess.PIPE,
+                    text=True,
+                    timeout=5
+                )
+                results = proc.stdout.strip().splitlines()
+                if not results:
+                    self.send_message(f"🔍 No files found matching `*{query}*` in `{self.current_dir}`.")
+                else:
+                    lines = [f"🔍 *Search Results for `*{query}*`:*"]
+                    for r in results:
+                        p = Path(r)
+                        icon = "📁" if p.is_dir() else "📄"
+                        try:
+                            rel = p.relative_to(self.current_dir)
+                        except Exception:
+                            rel = p
+                        lines.append(f"{icon} `{rel}`")
+                    lines.append("\n💡 Use `/get <filename>` or `/cd <folder>`")
+                    self.send_message("\n".join(lines))
+            except Exception as e:
+                self.send_message(f"❌ Search error: {e}")
 
         elif cmd == "/status":
             t = get_system_telemetry()
@@ -544,6 +777,33 @@ class TelegramBotBridge:
                         elif data.startswith("block_key:"):
                             self.answer_callback(cb_id, text="Key Blocked")
                             self.send_message("🚫 *DEVICE BLOCKED*\nThe unrecognized USB was rejected. No commands will be permitted.")
+
+                        elif data.startswith("cd:"):
+                            sub_dir = data.split("cd:", 1)[1]
+                            self.answer_callback(cb_id, text=f"Opening {sub_dir}")
+                            target = (self.current_dir / sub_dir).resolve()
+                            if target.exists() and target.is_dir():
+                                self.current_dir = target
+                            text, markup = self.build_dir_view(self.current_dir)
+                            self.send_message(text, reply_markup=markup)
+
+                        elif data == "cd_up":
+                            self.answer_callback(cb_id, text="Up one level")
+                            if self.current_dir != Path("/"):
+                                self.current_dir = self.current_dir.parent
+                            text, markup = self.build_dir_view(self.current_dir)
+                            self.send_message(text, reply_markup=markup)
+
+                        elif data == "cd_home":
+                            self.answer_callback(cb_id, text="Home folder")
+                            self.current_dir = Path.home()
+                            text, markup = self.build_dir_view(self.current_dir)
+                            self.send_message(text, reply_markup=markup)
+
+                        elif data == "cd_refresh":
+                            self.answer_callback(cb_id, text="Refreshed")
+                            text, markup = self.build_dir_view(self.current_dir)
+                            self.send_message(text, reply_markup=markup)
                         continue
 
                     # Handle Regular Messages
