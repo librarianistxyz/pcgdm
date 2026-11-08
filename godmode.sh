@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # pcGDM — MASTER GOD MODE CONTROLLER (Xubuntu / Linux)
-# One command to install, start, and monitor all 7 God Mode daemons across reboots
+# One command to install, start, and monitor all 8 God Mode daemons across reboots
 # ==============================================================================
 
 set -euo pipefail
@@ -14,6 +14,7 @@ HUD_PY="$SCRIPT_DIR/mac_hud.py"
 AIRDROP_PY="$SCRIPT_DIR/airdrop_zero.py"
 WARP_PY="$SCRIPT_DIR/warp_ram.py"
 GRAB_PY="$SCRIPT_DIR/hyper_grab.py"
+HIVE_PY="$SCRIPT_DIR/hive_nexus.py"
 
 USER_SERVICE_DIR="$HOME/.config/systemd/user"
 AUTOSTART_DIR="$HOME/.config/autostart"
@@ -38,7 +39,11 @@ GRAB_SERVICE="pcgdm-hypergrab.service"
 GRAB_SERVICE_FILE="$USER_SERVICE_DIR/$GRAB_SERVICE"
 GRAB_AUTOSTART="$AUTOSTART_DIR/pcgdm-hypergrab.desktop"
 
-chmod +x "$JANITOR_CTL" "$CRYO_PY" "$FREEZER_PY" "$HUD_PY" "$AIRDROP_PY" "$WARP_PY" "$GRAB_PY"
+HIVE_SERVICE="pcgdm-hive.service"
+HIVE_SERVICE_FILE="$USER_SERVICE_DIR/$HIVE_SERVICE"
+HIVE_AUTOSTART="$AUTOSTART_DIR/pcgdm-hive.desktop"
+
+chmod +x "$JANITOR_CTL" "$CRYO_PY" "$FREEZER_PY" "$HUD_PY" "$AIRDROP_PY" "$WARP_PY" "$GRAB_PY" "$HIVE_PY"
 
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'
@@ -231,33 +236,73 @@ EOF
     echo "[+] Hyper-Grab service installed, enabled on boot/login, and running!"
 }
 
+install_hive_service() {
+    mkdir -p "$USER_SERVICE_DIR" "$AUTOSTART_DIR"
+    cat > "$HIVE_SERVICE_FILE" <<EOF
+[Unit]
+Description=pcGDM Hive Nexus (Local Mesh Device Coordinator & IoT Whisperer)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 $HIVE_PY daemon
+Restart=on-failure
+RestartSec=3
+Environment=DISPLAY=${DISPLAY:-:0}
+Environment=DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}
+
+[Install]
+WantedBy=default.target
+EOF
+
+    cat > "$HIVE_AUTOSTART" <<EOF
+[Desktop Entry]
+Type=Application
+Name=pcGDM Hive Nexus
+Comment=Local Mesh Device Coordinator & IoT Whisperer
+Exec=systemctl --user start $HIVE_SERVICE
+Icon=network-wireless
+Terminal=false
+Hidden=false
+X-GNOME-Autostart-enabled=true
+EOF
+
+    systemctl --user daemon-reload
+    systemctl --user enable "$HIVE_SERVICE"
+    systemctl --user restart "$HIVE_SERVICE"
+    echo "[+] Hive Nexus service installed, enabled on boot/login, and running!"
+}
+
 install_all() {
     echo -e "${BOLD}╔══════════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BOLD}║       pcGDM MASTER INSTALLER — Activating All Boot Services      ║${NC}"
     echo -e "${BOLD}╚══════════════════════════════════════════════════════════════════╝${NC}"
 
-    echo -e "\n${CYAN}[1/7] Enabling Broad Auto-Janitor (35+ Folders Real-Time Sorter)...${NC}"
+    echo -e "\n${CYAN}[1/8] Enabling Broad Auto-Janitor (35+ Folders Real-Time Sorter)...${NC}"
     "$JANITOR_CTL" install --no-initial-sweep
 
-    echo -e "\n${CYAN}[2/7] Enabling Focus Freezer (Zero-CPU Background Browser Freezer)...${NC}"
+    echo -e "\n${CYAN}[2/8] Enabling Focus Freezer (Zero-CPU Background Browser Freezer)...${NC}"
     install_freezer_service
 
-    echo -e "\n${CYAN}[3/7] Enabling Keyboard Pulse HUD (Hardware Ambient Monitor)...${NC}"
+    echo -e "\n${CYAN}[3/8] Enabling Keyboard Pulse HUD (Hardware Ambient Monitor)...${NC}"
     install_hud_service
 
-    echo -e "\n${CYAN}[4/7] Enabling AirDrop-Zero (Peer-to-Peer Local Network File Dropper)...${NC}"
+    echo -e "\n${CYAN}[4/8] Enabling AirDrop-Zero (Peer-to-Peer Local Network File Dropper)...${NC}"
     install_airdrop_service
 
-    echo -e "\n${CYAN}[5/7] Enabling Warp-RAM Scratchpad (In-Memory Build Accelerator)...${NC}"
+    echo -e "\n${CYAN}[5/8] Enabling Warp-RAM Scratchpad (In-Memory Build Accelerator)...${NC}"
     install_warp_service
 
-    echo -e "\n${CYAN}[6/7] Enabling Hyper-Grab (Autonomous Clip-to-Action Downloader)...${NC}"
+    echo -e "\n${CYAN}[6/8] Enabling Hyper-Grab (Autonomous Clip-to-Action Downloader)...${NC}"
     install_grab_service
 
-    echo -e "\n${CYAN}[7/7] Enabling Unified Cryo + Power + RAM Engine (Root Boot Daemon)...${NC}"
+    echo -e "\n${CYAN}[7/8] Enabling Hive Nexus (Local Mesh IoT & Device Coordinator)...${NC}"
+    install_hive_service
+
+    echo -e "\n${CYAN}[8/8] Enabling Unified Cryo + Power + RAM Engine (Root Boot Daemon)...${NC}"
     sudo python3 "$CRYO_PY" install
 
-    echo -e "\n${GREEN}${BOLD}[✓] ALL 7 GOD MODE SERVICES INSTALLED AND ENABLED ON BOOT!${NC}"
+    echo -e "\n${GREEN}${BOLD}[✓] ALL 8 GOD MODE SERVICES INSTALLED AND ENABLED ON BOOT!${NC}"
 }
 
 status_all() {
@@ -266,6 +311,8 @@ status_all() {
     python3 "$FREEZER_PY" status
     echo ""
     python3 "$WARP_PY" status
+    echo ""
+    python3 "$HIVE_PY" status
     echo ""
     echo -e "${BOLD}╔══════════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BOLD}║     pcGDM SYSTEMCTL DAEMON STATUS (Survives Every Restart)       ║${NC}"
@@ -282,10 +329,12 @@ status_all() {
     systemctl --user is-active pcgdm-warpram.service || true
     echo -ne "  ${BOLD}6. Hyper-Grab (User)    :${NC} "
     systemctl --user is-active pcgdm-hypergrab.service || true
-    echo -ne "  ${BOLD}7. Cryo+RAM Engine      :${NC} "
+    echo -ne "  ${BOLD}7. Hive Nexus (User)    :${NC} "
+    systemctl --user is-active pcgdm-hive.service || true
+    echo -ne "  ${BOLD}8. Cryo+RAM Engine      :${NC} "
     systemctl is-active pcgdm-cryo.service || true
-    echo -e "  ${BOLD}8. Keyboard Backlight   :${NC} $(python3 "$HUD_PY" get 2>/dev/null || echo 'N/A')"
-    echo -e "  ${BOLD}9. AirDrop-Zero URL     :${NC} $(python3 "$AIRDROP_PY" url 2>/dev/null || echo 'N/A')"
+    echo -e "  ${BOLD}9. Keyboard Backlight   :${NC} $(python3 "$HUD_PY" get 2>/dev/null || echo 'N/A')"
+    echo -e "  ${BOLD}10. AirDrop-Zero URL    :${NC} $(python3 "$AIRDROP_PY" url 2>/dev/null || echo 'N/A')"
 }
 
 case "${1:-status}" in
@@ -306,6 +355,27 @@ case "${1:-status}" in
         ;;
     install-grab)
         install_grab_service
+        ;;
+    install-hive)
+        install_hive_service
+        ;;
+    ring|find-phone)
+        python3 "$HIVE_PY" ring-phone
+        ;;
+    phone-clip)
+        python3 "$HIVE_PY" sync-clip
+        ;;
+    phone-share)
+        python3 "$HIVE_PY" share-phone --target "${2:-}"
+        ;;
+    sms)
+        python3 "$HIVE_PY" send-sms --target "${2:-}" --msg "${3:-}"
+        ;;
+    tv)
+        python3 "$HIVE_PY" tv-status
+        ;;
+    lan-scan)
+        python3 "$HIVE_PY" scan
         ;;
     warp-sync)
         python3 "$WARP_PY" sync
@@ -342,8 +412,14 @@ case "${1:-status}" in
 Usage: ./godmode.sh <command>
 
 Commands:
-  install          One-click install & enable ALL 7 God Mode services on boot (systemctl)
+  install          One-click install & enable ALL 8 God Mode services on boot (systemctl)
   status           Show live hardware telemetry, frozen tabs, and systemctl service states
+  ring             Ring your Galaxy S9+ from your laptop terminal
+  phone-clip       Push your laptop's current clipboard straight to your phone
+  phone-share <f>  Send a file or URL directly to your phone
+  sms <num> <msg>  Send an SMS from your terminal via your phone
+  tv               Show real-time Smart TV (TCL/Cast) status & uptime
+  lan-scan         Scan local airspace for all mDNS/ZeroConf devices
   warp-sync        Manually flush in-memory ~/ramdisk to SSD right now
   drop / qr        Print AirDrop-Zero connection QR code/URL for your phone
   sweep            Manually sort all existing loose files across your folders right now

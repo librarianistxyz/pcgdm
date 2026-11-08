@@ -16,15 +16,29 @@ The suite is engineered to run on standard Linux installations as well as Apple 
 | **`focus_freezer.py`** | **100% Universal** | Any Linux desktop (X11 / XFCE / GNOME / KDE) | Kernel POSIX signals (`SIGSTOP`/`SIGCONT`), `xprop`, `pactl` |
 | **`warp_ram.py`** | **100% Universal** | Any Linux PC, laptop, or server | Linux Kernel shared memory `tmpfs` (`/dev/shm`), `rsync` |
 | **`hyper_grab.py`** | **100% Universal** | Any Linux desktop (X11 / XFCE / GNOME / KDE) | X11 clipboard (`xclip`), `yt-dlp`, `rofi`/`zenity` |
+| **`hive_nexus.py`** | **100% Universal** | Any Linux PC on Wi-Fi / Local Area Network | Google Cast / DIAL REST API, KDE Connect, mDNS Avahi |
 | **`airdrop_zero.py`** | **100% Universal** | Any Linux PC on Wi-Fi / Local Area Network | Standard Python 3 sockets & multi-threaded HTTP server |
 | **`mac_hud.py`** | **Broad Laptop Support** | Apple MacBooks, ThinkPads, Dells, ASUS, System76 | Linux sysfs LED subsystem (`/sys/class/leds/*kbd_backlight*`) |
 | **`cryo_ram_boost.py`** | **Universal CPU & RAM / Hardware Adaptive Cooling** | Any Intel or AMD Linux PC; custom fan curve for Apple SMC & ThinkPad | Intel P-State / AMD cpupreq, `/proc/sys/vm/`, Apple SMC |
 
 ---
 
-## The 7 Active God Mode Engines
+## The 8 Active God Mode Engines
 
-### 1. `hyper_grab.py` — Autonomous Clip-to-Action Watcher
+### 1. `hive_nexus.py` — Local Mesh Device Coordinator & IoT Whisperer
+* **Smart TV Integration (TCL / Google Cast / DIAL Protocol)**:
+  - Discovers and monitors your Smart TV (`ISMART` at `10.1.0.144`).
+  - Reads live telemetry: Online status, uptime, Cast build revision, SSDP UDN without extra libraries.
+* **Android / Galaxy S9+ Bridge (KDE Connect)**:
+  - **Ring Phone**: Locate your phone in the room instantly with `./godmode.sh ring`.
+  - **Clipboard Push**: Push your PC clipboard to your phone with `./godmode.sh phone-clip`.
+  - **Terminal SMS**: Send SMS text messages through your phone straight from the terminal with `./godmode.sh sms <number> <message>`.
+  - **Share File / URL**: Push files directly to your phone with `./godmode.sh phone-share <path>`.
+* **Autonomous LAN Radar**:
+  - Sweeps the local Wi-Fi every 90 seconds using mDNS / Avahi.
+  - Logs device arrivals/departures and displays desktop notifications when new devices join your network.
+
+### 2. `hyper_grab.py` — Autonomous Clip-to-Action Watcher
 * **Zero-Friction Media Downloader**: Watches the X11 clipboard in real time (<0.1s latency, 0% CPU).
   - Copy any YouTube, TikTok, Twitter/X, Instagram, Vimeo, or Reddit URL → brings up an instant action overlay (`1080p Video` / `MP3 Audio` / `Ignore`).
   - Downloads in the background via `yt-dlp` into `~/Downloads/`.
@@ -32,7 +46,7 @@ The suite is engineered to run on standard Linux installations as well as Apple 
   - Your physical keyboard backlight flashes twice when the download is complete!
 * **Auto-JSON Beautifier**: When unformatted, messy single-line JSON is copied, Hyper-Grab instantly formats and indents it directly on your clipboard.
 
-### 2. `warp_ram.py` — In-Memory Build Accelerator & Auto-Scratchpad
+### 3. `warp_ram.py` — In-Memory Build Accelerator & Auto-Scratchpad
 * **Zero-Sudo, Zero-Wear Architecture**: Mounts directly into the Linux kernel's high-speed shared memory (`/dev/shm`) and symlinks seamlessly to `~/ramdisk`.
 * **Fully Automated**:
   - **Flutter / Dart Automation**: `PUB_CACHE` is routed directly to `~/ramdisk/.pub-cache` so packages and builds resolve at memory speed.
@@ -41,7 +55,7 @@ The suite is engineered to run on standard Linux installations as well as Apple 
   - **One-Key Jump (`cdr`)**: Fast jump to your RAM scratchpad in the terminal.
 * **Continuous Auto-Sync**: Automatically mirrors all files to persistent SSD backing (`~/.local/share/pcGDM/ramdisk_backing`) every 60 seconds and on clean system shutdown. Restores the image into RAM automatically on boot!
 
-### 3. `auto_janitor.py` — Broad User-Wide Real-Time File Sorter
+### 4. `auto_janitor.py` — Broad User-Wide Real-Time File Sorter
 * **Universal Linux Core**: Hooks into the Linux kernel `inotify` C API (`libc.so.6`) via Python `ctypes` (0% polling overhead). Runs on any distribution.
 * **What it does**: Watches 35+ user folders (including `~/Downloads`, `~/Desktop`, `~/Documents`, `~/Pictures`, `~/Videos`, `~/Music`, `~/Public`, and `$HOME`) and routes newly downloaded or moved files the instant they finish writing:
   * `.pdf`, `.epub` → `PDFs/`
@@ -54,7 +68,7 @@ The suite is engineered to run on standard Linux installations as well as Apple 
 * **Protections**: Ignores temporary browser downloads (`.crdownload`, `.part`, `.tmp`), preserves `.desktop` launchers, never overwrites existing files (appends counter), and leaves Git repositories, project directories, and SDKs completely untouched.
 * **Notification**: Triggers native desktop notification and blinks the physical keyboard backlight.
 
-### 4. `focus_freezer.py` — Zero-CPU Background Browser Freezer
+### 5. `focus_freezer.py` — Zero-CPU Background Browser Freezer
 * **Universal Linux Core**: Event-driven X11 window focus monitor via `xprop` and kernel signal suspension (`SIGSTOP` / `SIGCONT`).
 * **What it does**: On laptops and multi-tab workflows, background browsers (Chromium, Chrome, Brave, Firefox, Edge, AdsPower) easily consume 40–70% CPU and cause fan noise.
   * When your browser is unfocused for >18 seconds and **not playing audio**, it suspends child tab renderers via `SIGSTOP`, dropping their CPU usage to **0.0%**.
@@ -62,7 +76,7 @@ The suite is engineered to run on standard Linux installations as well as Apple 
   * Automatically deprioritizes background file indexers (`localsearch-3`, `tracker`) to idle CPU priority (`nice 19`).
 * **Audio Guard**: Automatically inspects PulseAudio/PipeWire sink inputs via `pactl` so YouTube, Spotify, or media tabs in the background are **never** frozen while playing audio.
 
-### 5. `mac_hud.py` — Hardware Keyboard Pulse & Ambient HUD
+### 6. `mac_hud.py` — Hardware Keyboard Pulse & Ambient HUD
 * **Hardware Interface**: Uses standard Linux sysfs LED control (`/sys/class/leds/*kbd_backlight*`). On MacBooks it talks to `smc::kbd_backlight`; on ThinkPads to `tpacpi::kbd_backlight`; on other PCs to generic keyboard LEDs.
 * **What it does**: Turns your physical backlit keyboard into a physical notification and telemetry engine:
   * **`flash`**: Rapid double-flash to acknowledge task completion (e.g. download sorted, file received).
@@ -70,14 +84,14 @@ The suite is engineered to run on standard Linux installations as well as Apple 
   * **`alert`**: Strobe pattern for urgent alerts.
   * **`hud` daemon**: Background ambient monitor that triggers a slow breathing pulse when CPU temperature hits **82°C+** and flashes an alert when battery drops below **15%**.
 
-### 6. `airdrop_zero.py` — Peer-to-Peer Local Network File Dropper
+### 7. `airdrop_zero.py` — Peer-to-Peer Local Network File Dropper
 * **Universal Linux Core**: Lightweight Python multi-threaded HTTP server on port `7777`. Zero third-party dependencies.
 * **What it does**: Wirelessly drop files between your phone (iOS / Android) and your Linux PC on the same Wi-Fi without cloud accounts, apps, or cables.
   * Open `http://<pc-ip>:7777` in your phone browser (or run `./godmode.sh drop` to view the terminal QR code).
   * **Upload (Phone → PC)**: Select photos/documents on your phone and tap Send. Files land in `~/Downloads`, Auto-Janitor sorts them instantly, and the keyboard backlight blinks twice.
   * **Download (PC → Phone)**: Tap any file under "Files on MacBook / PC" to download it straight to your phone.
 
-### 7. `cryo_ram_boost.py` — Thermal Cryo Fan Curve & Memory Subsystem Engine
+### 8. `cryo_ram_boost.py` — Thermal Cryo Fan Curve & Memory Subsystem Engine
 * **Universal CPU & Memory / Adaptive Cooling**:
   * **Power Governors (Universal)**: Manages Intel P-State and CPU scaling governors (`powersave` vs `performance`) and turbo controls across all Linux kernels.
   * **RAM Reclaimer (Universal)**: Directly controls `/proc/sys/vm/drop_caches` and `/proc/sys/vm/compact_memory` to reclaim gigabytes of bloated buffer/pagecache and compact physical RAM.
@@ -93,6 +107,7 @@ The suite is engineered to run on standard Linux installations as well as Apple 
 ```text
 /home/librarianist/pcGDM/
 ├── godmode.sh           # Master CLI controller to manage and monitor all engines
+├── hive_nexus.py        # Local mesh IoT & device coordinator (Universal Linux)
 ├── hyper_grab.py        # Autonomous clip-to-action downloader (Universal Linux)
 ├── warp_ram.py          # In-memory build scratchpad & auto-sync (Universal Linux)
 ├── auto_janitor.py      # Real-time inotify file organizer (Universal Linux)
@@ -124,8 +139,9 @@ This single command sets up:
 4. `pcgdm-airdrop.service` (`systemd --user`)
 5. `pcgdm-warpram.service` (`systemd --user`)
 6. `pcgdm-hypergrab.service` (`systemd --user`)
-7. `pcgdm-cryo.service` (root `systemd`)
-8. Passwordless sudoers rule for CPU/thermal execution.
+7. `pcgdm-hive.service` (`systemd --user`)
+8. `pcgdm-cryo.service` (root `systemd`)
+9. Passwordless sudoers rule for CPU/thermal execution.
 
 ### 2. Verify Running Services
 Check the live status of all hardware telemetry and background services:
@@ -140,7 +156,13 @@ Check the live status of all hardware telemetry and background services:
 
 | Command | Action |
 | :--- | :--- |
-| `./godmode.sh status` | Show live CPU temp, fan RPM, battery draw, RAM, frozen tabs, and systemctl status |
+| `./godmode.sh status` | Show live CPU temp, fan RPM, battery draw, RAM, frozen tabs, TV and phone status |
+| `./godmode.sh ring` | Find your phone by ringing your Galaxy S9+ from your laptop terminal |
+| `./godmode.sh phone-clip` | Push your laptop's clipboard straight to your phone |
+| `./godmode.sh phone-share <f>` | Send any file or URL directly to your Galaxy S9+ |
+| `./godmode.sh sms <num> <msg>` | Send an SMS text message from your laptop terminal |
+| `./godmode.sh tv` | Show real-time Smart TV (TCL/Cast) status & uptime |
+| `./godmode.sh lan-scan` | Scan local airspace for all mDNS/ZeroConf devices |
 | `./godmode.sh warp-sync`| Manually mirror in-memory `~/ramdisk` changes to persistent SSD right now |
 | `./godmode.sh purge` | Instantly flush Linux pagecache/dentries and reclaim RAM |
 | `./godmode.sh sweep` | Manually run a full file sort across all 35 user folders right now |
