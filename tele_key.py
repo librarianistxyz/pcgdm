@@ -193,7 +193,16 @@ class TelegramBotBridge:
         self.running = False
         self.last_update_id = 0
         self.worker_thread: Optional[threading.Thread] = None
+        self.clear_webhook()
         self.register_commands()
+
+    def clear_webhook(self) -> None:
+        try:
+            url = f"{self.api_url}/deleteWebhook?drop_pending_updates=False"
+            req = urllib.request.Request(url)
+            urllib.request.urlopen(req, timeout=5)
+        except Exception:
+            pass
 
     def register_commands(self) -> None:
         commands = [
