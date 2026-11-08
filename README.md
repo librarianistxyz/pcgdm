@@ -1,16 +1,30 @@
-# pcGDM — God Mode Automation Suite
+# pcGDM — God Mode Automation Suite for Linux & MacBooks
 
-A hardware-tailored, zero-dependency background engine and automation toolkit designed specifically for a **2012 MacBook Pro (Ivy Bridge Intel Core i5 / Apple SMC / Broadcom BCM4331) running Xubuntu Linux**.
+A hardware-tailored, zero-dependency background engine and automation toolkit designed for **Linux PCs and laptops** (Ubuntu, Xubuntu, Debian, Fedora, Arch, ThinkPads, Dells) with specialized optimizations for **Intel/Apple hardware (e.g. 2012 MacBook Pro / Ivy Bridge / Apple SMC)**.
 
-All daemons are built with **double persistence** via `systemd` user/system services and XFCE session autostart so they **survive every reboot automatically**.
+All daemons are built with **double persistence** via `systemd` user/system services and desktop session autostart so they **survive every reboot automatically**.
+
+---
+
+## Linux PC & Hardware Compatibility Matrix
+
+The suite is engineered to run on standard Linux installations as well as Apple hardware running Linux:
+
+| Engine | Universal Linux Compatibility | Supported Platforms | Hardware Drivers Used |
+| :--- | :---: | :--- | :--- |
+| **`auto_janitor.py`** | **100% Universal** | Any Linux PC, laptop, or server (Ubuntu, Debian, Fedora, Arch, etc.) | Linux Kernel `inotify` subsystem (`libc.so.6`) |
+| **`focus_freezer.py`** | **100% Universal** | Any Linux desktop (X11 / XFCE / GNOME / KDE) | Kernel POSIX signals (`SIGSTOP`/`SIGCONT`), `xprop`, `pactl` |
+| **`airdrop_zero.py`** | **100% Universal** | Any Linux PC on Wi-Fi / Local Area Network | Standard Python 3 sockets & multi-threaded HTTP server |
+| **`mac_hud.py`** | **Broad Laptop Support** | Apple MacBooks, ThinkPads, Dells, ASUS, System76 | Linux sysfs LED subsystem (`/sys/class/leds/*kbd_backlight*`) |
+| **`cryo_ram_boost.py`** | **Universal CPU & RAM / Hardware Adaptive Cooling** | Any Intel or AMD Linux PC; custom fan curve for Apple SMC & ThinkPad | Intel P-State / AMD cpupreq, `/proc/sys/vm/`, Apple SMC |
 
 ---
 
 ## The 5 Active God Mode Engines
 
 ### 1. `auto_janitor.py` — Broad User-Wide Real-Time File Sorter
-* **Technology**: Linux kernel `inotify` C API (`libc.so.6`) via Python `ctypes` (0% polling overhead).
-* **What it does**: Watches 35+ user folders (including `~/Downloads`, `~/Desktop`, `~/Documents`, `~/Pictures`, `~/Videos`, `~/Music`, `~/Public`, and the top-level `$HOME`) and routes newly downloaded or moved files the instant they finish writing:
+* **Universal Linux Core**: Hooks into the Linux kernel `inotify` C API (`libc.so.6`) via Python `ctypes` (0% polling overhead). Runs on any distribution.
+* **What it does**: Watches 35+ user folders (including `~/Downloads`, `~/Desktop`, `~/Documents`, `~/Pictures`, `~/Videos`, `~/Music`, `~/Public`, and `$HOME`) and routes newly downloaded or moved files the instant they finish writing:
   * `.pdf`, `.epub` → `PDFs/`
   * `.png`, `.jpg`, `.webp`, `.svg` → `Images/`
   * `.zip`, `.tar.gz`, `.deb`, `.iso`, `.AppImage` → `Archives/`
@@ -19,39 +33,39 @@ All daemons are built with **double persistence** via `systemd` user/system serv
   * `.mp4`, `.mkv` → `Video/`
   * `.mp3`, `.flac`, `.wav` → `Audio/`
 * **Protections**: Ignores temporary browser downloads (`.crdownload`, `.part`, `.tmp`), preserves `.desktop` launchers, never overwrites existing files (appends counter), and leaves Git repositories, project directories, and SDKs completely untouched.
-* **Notification**: Triggers native Xubuntu desktop notification and blinks the physical keyboard backlight.
+* **Notification**: Triggers native desktop notification and blinks the physical keyboard backlight.
 
 ### 2. `focus_freezer.py` — Zero-CPU Background Browser Freezer
-* **Technology**: Event-driven X11 window focus monitor via `xprop` and kernel signal suspension (`SIGSTOP` / `SIGCONT`).
-* **What it does**: On an Ivy Bridge dual-core CPU with 8GB RAM, background browsers (Chromium, Chrome, Brave, Firefox, Edge, AdsPower) easily consume 40–70% CPU and cause fan noise.
-  * When your browser is unfocused for >18 seconds and **not playing audio**, it suspends the child tab renderers via `SIGSTOP`, dropping their CPU usage to **0.0%**.
+* **Universal Linux Core**: Event-driven X11 window focus monitor via `xprop` and kernel signal suspension (`SIGSTOP` / `SIGCONT`).
+* **What it does**: On laptops and multi-tab workflows, background browsers (Chromium, Chrome, Brave, Firefox, Edge, AdsPower) easily consume 40–70% CPU and cause fan noise.
+  * When your browser is unfocused for >18 seconds and **not playing audio**, it suspends child tab renderers via `SIGSTOP`, dropping their CPU usage to **0.0%**.
   * The millisecond you click or Alt-Tab back, it sends `SIGCONT` (<10ms wake-up).
   * Automatically deprioritizes background file indexers (`localsearch-3`, `tracker`) to idle CPU priority (`nice 19`).
 * **Audio Guard**: Automatically inspects PulseAudio/PipeWire sink inputs via `pactl` so YouTube, Spotify, or media tabs in the background are **never** frozen while playing audio.
 
-### 3. `mac_hud.py` — Apple SMC Keyboard Hardware Pulse & Ambient HUD
-* **Technology**: Interfaces directly with `/sys/class/leds/smc::kbd_backlight/brightness` (0–255).
-* **What it does**: Turns your physical MacBook Pro backlit keyboard into a physical notification and telemetry engine:
+### 3. `mac_hud.py` — Hardware Keyboard Pulse & Ambient HUD
+* **Hardware Interface**: Uses standard Linux sysfs LED control (`/sys/class/leds/*kbd_backlight*`). On MacBooks it talks to `smc::kbd_backlight`; on ThinkPads to `tpacpi::kbd_backlight`; on other PCs to generic keyboard LEDs.
+* **What it does**: Turns your physical backlit keyboard into a physical notification and telemetry engine:
   * **`flash`**: Rapid double-flash to acknowledge task completion (e.g. download sorted, file received).
   * **`breathe`**: Smooth sine-wave cosine breathing pulse.
   * **`alert`**: Strobe pattern for urgent alerts.
   * **`hud` daemon**: Background ambient monitor that triggers a slow breathing pulse when CPU temperature hits **82°C+** and flashes an alert when battery drops below **15%**.
 
 ### 4. `airdrop_zero.py` — Peer-to-Peer Local Network File Dropper
-* **Technology**: Lightweight Python multi-threaded HTTP server on port `7777`.
-* **What it does**: Wirelessly drop files between your phone (iOS / Android) and your MacBook Pro on the same Wi-Fi without cloud accounts, apps, or cables.
-  * Open `http://<laptop-ip>:7777` in your phone browser (or run `./godmode.sh drop` to view the terminal QR code).
-  * **Upload (Phone → MacBook)**: Select photos/documents on your phone and tap Send. Files land in `~/Downloads`, Auto-Janitor sorts them instantly, and the keyboard backlight blinks twice.
-  * **Download (MacBook → Phone)**: Tap any file under "Files on MacBook" to download it straight to your phone.
+* **Universal Linux Core**: Lightweight Python multi-threaded HTTP server on port `7777`. Zero third-party dependencies.
+* **What it does**: Wirelessly drop files between your phone (iOS / Android) and your Linux PC on the same Wi-Fi without cloud accounts, apps, or cables.
+  * Open `http://<pc-ip>:7777` in your phone browser (or run `./godmode.sh drop` to view the terminal QR code).
+  * **Upload (Phone → PC)**: Select photos/documents on your phone and tap Send. Files land in `~/Downloads`, Auto-Janitor sorts them instantly, and the keyboard backlight blinks twice.
+  * **Download (PC → Phone)**: Tap any file under "Files on MacBook / PC" to download it straight to your phone.
 
-### 5. `cryo_ram_boost.py` — Apple SMC Cryo Fan Curve & RAM Engine
-* **Technology**: Apple SMC thermal registers (`applesmc.768`), Intel P-State turbo, and Linux VM kernel memory controls (`/proc/sys/vm/drop_caches`, `compact_memory`).
-* **What it does**:
-  * **Smart Power Profiles**: Automatically detects MagSafe AC power vs. battery.
-    * **On Battery (`AUTO-STEALTH`)**: Disables Intel 3.1 GHz Turbo voltage spikes (`no_turbo=1`) and sets `powersave` governor to keep palmrests cool and extend battery life.
-    * **On MagSafe (`AUTO-TURBO`)**: Unlocks full 3.1 GHz Turbo Boost with `performance` governor.
-  * **Dynamic Fan Curve**: Smoothly steps Apple SMC exhaust fan minimum floor (`2200` → `3100` → `4200` → `5400` → full **6200 RPM Cryo Blast** if CPU hits 82°C+).
-  * **Auto-RAM Reclaimer**: Flushes pagecache and compacts memory when available RAM dips below 900 MiB or cache exceeds 3.5 GB.
+### 5. `cryo_ram_boost.py` — Thermal Cryo Fan Curve & Memory Subsystem Engine
+* **Universal CPU & Memory / Adaptive Cooling**:
+  * **Power Governors (Universal)**: Manages Intel P-State and CPU scaling governors (`powersave` vs `performance`) and turbo controls across all Linux kernels.
+  * **RAM Reclaimer (Universal)**: Directly controls `/proc/sys/vm/drop_caches` and `/proc/sys/vm/compact_memory` to reclaim gigabytes of bloated buffer/pagecache and compact physical RAM.
+  * **Smart Power Profiles**:
+    * **On Battery (`AUTO-STEALTH`)**: Disables Intel turbo voltage spikes and sets `powersave` governor to extend battery life.
+    * **Plugged In (`AUTO-TURBO`)**: Unlocks maximum Turbo Boost with `performance` governor.
+  * **Cooling Curves**: Integrates with Apple SMC hardware registers (`applesmc.768`) up to 6200 RPM, with fallback to standard Linux `hwmon` thermal zones.
 
 ---
 
@@ -60,14 +74,14 @@ All daemons are built with **double persistence** via `systemd` user/system serv
 ```text
 /home/librarianist/pcGDM/
 ├── godmode.sh           # Master CLI controller to manage and monitor all engines
-├── auto_janitor.py      # Real-time inotify file organizer
+├── auto_janitor.py      # Real-time inotify file organizer (Universal Linux)
 ├── janitorctl.sh        # Service controller for Auto-Janitor
-├── focus_freezer.py     # Background browser tab zero-CPU freezer
-├── mac_hud.py           # Apple SMC keyboard backlight pulse & HUD
-├── airdrop_zero.py      # Micro-web peer-to-peer file dropper
-├── cryo_ram_boost.py    # Apple SMC cooling & memory subsystem engine
+├── focus_freezer.py     # Background browser tab zero-CPU freezer (Universal Linux)
+├── mac_hud.py           # Hardware keyboard backlight pulse & HUD (Linux sysfs LEDs)
+├── airdrop_zero.py      # Micro-web peer-to-peer file dropper (Universal Linux)
+├── cryo_ram_boost.py    # Power profiles, fan curves & RAM subsystem engine
 ├── .gitignore           # Git ignore file for logs, pycache, and temporary state
-└── README.md            # Documentation and setup guide
+└── README.md            # Documentation, compatibility matrix, and setup guide
 ```
 
 ---
@@ -75,7 +89,7 @@ All daemons are built with **double persistence** via `systemd` user/system serv
 ## Quick Setup & Installation
 
 ### 1. One-Click Enable All Boot Daemons
-Run the master installer to configure all `systemd` unit files and session autostart entries:
+Run the master installer on your Linux PC:
 
 ```bash
 cd /home/librarianist/pcGDM
@@ -88,7 +102,7 @@ This single command sets up:
 3. `pcgdm-hud.service` (`systemd --user`)
 4. `pcgdm-airdrop.service` (`systemd --user`)
 5. `pcgdm-cryo.service` (root `systemd`)
-6. Passwordless sudoers rule for hardware SMC/CPU execution.
+6. Passwordless sudoers rule for CPU/thermal execution.
 
 ### 2. Verify Running Services
 Check the live status of all hardware telemetry and background services:
@@ -111,6 +125,6 @@ Check the live status of all hardware telemetry and background services:
 | `./godmode.sh flash` | Blink physical keyboard backlight twice |
 | `./godmode.sh breathe` | Trigger a smooth ambient keyboard breathing pulse |
 | `./godmode.sh alert` | Trigger an urgent strobe sequence on keyboard LEDs |
-| `./godmode.sh turbo` | Force full 3.1 GHz Turbo + 5500 RPM fan floor |
-| `./godmode.sh stealth` | Force 2.5 GHz low-power cap for extended battery |
-| `./godmode.sh cryo` | Force Apple SMC exhaust fan to 6200 RPM maximum blizzard speed |
+| `./godmode.sh turbo` | Force full Turbo CPU performance mode |
+| `./godmode.sh stealth` | Force low-power cap for extended battery and lower temperatures |
+| `./godmode.sh cryo` | Force maximum cooling fan blast |
