@@ -39,6 +39,17 @@ SCREENSHOT_TMP = Path("/tmp/tele_screen.png")
 DEFAULT_TARGET_SERIAL = "0377291581335169734"
 DEFAULT_DISK_BY_ID = "/dev/disk/by-id/usb-Generic_Flash_Disk_0377291581335169734-0:0"
 
+KEYBOARD_MARKUP = {
+    "keyboard": [
+        [{"text": "📊 Status"}, {"text": "📸 Screenshot"}],
+        [{"text": "🔒 Lock Screen"}, {"text": "🔔 Ring Phone"}],
+        [{"text": "📋 Clipboard"}, {"text": "❄️ Turbo Cryo"}],
+        [{"text": "❓ Help"}]
+    ],
+    "resize_keyboard": True,
+    "persistent": True
+}
+
 
 def load_config() -> Dict[str, Any]:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -182,16 +193,41 @@ class TelegramBotBridge:
         self.running = False
         self.last_update_id = 0
         self.worker_thread: Optional[threading.Thread] = None
+        self.register_commands()
 
-    def send_message(self, text: str, parse_mode: str = "Markdown") -> bool:
+    def register_commands(self) -> None:
+        commands = [
+            {"command": "status", "description": "📊 Live CPU, RAM, Battery & Temps"},
+            {"command": "screenshot", "description": "📸 Snap MacBook Desktop Photo"},
+            {"command": "lock", "description": "🔒 Lock Laptop Session"},
+            {"command": "clip", "description": "📋 Get Laptop Clipboard Text"},
+            {"command": "ring", "description": "🔔 Ring Galaxy S9+ Phone"},
+            {"command": "cryo", "description": "❄️ Set Turbo/Stealth Power"},
+            {"command": "cmd", "description": "⚙️ Run Shell Command"},
+            {"command": "help", "description": "⚡ Show Command Matrix"}
+        ]
+        url = f"{self.api_url}/setMyCommands"
+        try:
+            req = urllib.request.Request(
+                url,
+                data=json.dumps({"commands": commands}).encode("utf-8"),
+                headers={"Content-Type": "application/json"}
+            )
+            urllib.request.urlopen(req, timeout=5)
+        except Exception:
+            pass
+
+    def send_message(self, text: str, parse_mode: str = "Markdown", with_keyboard: bool = True) -> bool:
         if not self.token or not self.chat_id:
             return False
         url = f"{self.api_url}/sendMessage"
-        payload = {
+        payload: Dict[str, Any] = {
             "chat_id": self.chat_id,
             "text": text,
             "parse_mode": parse_mode
         }
+        if with_keyboard:
+            payload["reply_markup"] = KEYBOARD_MARKUP
         try:
             data = json.dumps(payload).encode("utf-8")
             req = urllib.request.Request(
@@ -261,11 +297,38 @@ class TelegramBotBridge:
 
     def handle_command(self, cmd_text: str) -> None:
         cmd_text = cmd_text.strip()
-        parts = cmd_text.split()
-        if not parts:
+        if not cmd_text:
             return
-        cmd = parts[0].lower()
-        args = parts[1:]
+
+        lower = cmd_text.lower()
+        if "status" in lower:
+            cmd = "/status"
+            args = []
+        elif "screenshot" in lower or "photo" in lower:
+            cmd = "/screenshot"
+            args = []
+        elif "lock" in lower:
+            cmd = "/lock"
+            args = []
+        elif "ring" in lower:
+            cmd = "/ring"
+            args = []
+        elif "clip" in lower:
+            cmd = "/clip"
+            args = []
+        elif "turbo" in lower:
+            cmd = "/cryo"
+            args = ["turbo"]
+        elif "stealth" in lower:
+            cmd = "/cryo"
+            args = ["stealth"]
+        elif "help" in lower or "start" in lower:
+            cmd = "/help"
+            args = []
+        else:
+            parts = cmd_text.split()
+            cmd = parts[0].lower()
+            args = parts[1:]
 
         if cmd in ("/start", "/help"):
             msg = (
@@ -419,7 +482,7 @@ class TelegramBotBridge:
                         print(f"[TeleKey] Blocked unauthorized message from ID: {sender_id}")
                         continue
 
-                    if text.startswith("/"):
+                    if text:
                         self.handle_command(text)
             except Exception as e:
                 time.sleep(2)
