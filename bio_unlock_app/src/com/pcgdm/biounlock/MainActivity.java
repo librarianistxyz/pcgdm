@@ -311,7 +311,7 @@ public class MainActivity extends Activity {
 
         if (Build.VERSION.SDK_INT >= 28) {
             BiometricPrompt prompt = new BiometricPrompt.Builder(this)
-                    .setTitle("Unlock Xubuntu PC")
+                    .setTitle("Unlock Librarianist PC")
                     .setSubtitle("Touch rear fingerprint sensor")
                     .setNegativeButton("Cancel", getMainExecutor(), (d, w) -> setStatus("Cancelled", "#8B949E"))
                     .build();

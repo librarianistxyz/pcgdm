@@ -19,11 +19,18 @@ The suite is engineered to run on standard Linux installations as well as Apple 
 | **`hive_nexus.py`** | **100% Universal** | Any Linux PC on Wi-Fi / Local Area Network | Google Cast / DIAL REST API, KDE Connect, mDNS Avahi |
 | **`airdrop_zero.py`** | **100% Universal** | Any Linux PC on Wi-Fi / Local Area Network | Standard Python 3 sockets & multi-threaded HTTP server |
 | **`mac_hud.py`** | **Broad Laptop Support** | Apple MacBooks, ThinkPads, Dells, ASUS, System76 | Linux sysfs LED subsystem (`/sys/class/leds/*kbd_backlight*`) |
+| **`mac_visualizer.py`** | **Broad Laptop Support** | Apple MacBooks & backlit Linux laptops | PipeWire/PulseAudio sink monitor + sysfs LEDs |
+| **`adjust_kbd_light.py`** | **Broad Laptop Support** | Apple MacBooks & backlit Linux laptops | Apple SMC F5/F6 key listener + sysfs LEDs |
 | **`cryo_ram_boost.py`** | **Universal CPU & RAM / Hardware Adaptive Cooling** | Any Intel or AMD Linux PC; custom fan curve for Apple SMC & ThinkPad | Intel P-State / AMD cpupreq, `/proc/sys/vm/`, Apple SMC |
+| **`cctv_grid.py`** | **100% Universal (X11)** | Any Linux X11 desktop (XFCE / `xfwm4`) | `wmctrl`, `xdotool`, `xprop`, `fcntl` lock |
+| **`ocr_grab.py`** | **100% Universal (X11)** | Any Linux X11 desktop | `xfce4-screenshooter`, Pillow, offline `tesseract`, `xclip` |
+| **`bio_unlock.py`** | **100% Universal + Android** | Linux PC (`systemd` + LightDM/XFCE) + Galaxy S9+ APK | TCP `29422`, UDP `29423`, Bluetooth RFCOMM `22`, `pam_exec`, `HMAC-SHA256` |
+| **`mac_call.py`** | **100% Universal (Bluetooth)** | Any Linux PC paired with Android/iOS via BlueZ HFP | `bluetoothctl`, BlueZ HFP, `zenity`/`rofi` |
+| **`tele_key.py`** | **100% Universal** | Any Linux PC with USB key + Telegram Bot API | `lsusb`, Telegram Bot API, TTS |
 
 ---
 
-## The 8 Active God Mode Engines
+## The Active God Mode Engines
 
 ### 1. `hive_nexus.py` — Local Mesh Device Coordinator & IoT Whisperer
 * **Smart TV Integration (TCL / Google Cast / DIAL Protocol)**:
@@ -100,24 +107,61 @@ The suite is engineered to run on standard Linux installations as well as Apple 
     * **Plugged In (`AUTO-TURBO`)**: Unlocks maximum Turbo Boost with `performance` governor.
   * **Cooling Curves**: Integrates with Apple SMC hardware registers (`applesmc.768`) up to 6200 RPM, with fallback to standard Linux `hwmon` thermal zones.
 
+### 9. `cctv_grid.py` — Live Workspace CCTV Grid & Gesture Switcher
+* **Multi-Workspace Command Center**: Gathers all open windows across every XFCE workspace onto your current screen in a live, interactive CCTV grid, saving a snapshot of original workspaces and geometries.
+* **Controls**:
+  * **`Super + G` / 3-finger swipe up (`toggle`)**: Toggle CCTV grid ON, or restore every window back to its original workspace and size.
+  * **`Super + Z` / 3-finger swipe down (`zoom`)**: Maximize the focused tile, or snap it back into the grid.
+  * **3-finger swipe left / right (`ws-prev` / `ws-next`)**: Wrap-around workspace switching via `wmctrl`.
+
+### 10. `ocr_grab.py` — Offline Screen-to-Text OCR Grab
+* **Drag-to-Copy Anything (`Super + O`)**: Select any region on screen (video frame, PDF, image, error dialog) with `xfce4-screenshooter -r`.
+* **Fast Local Recognition**: Upscales small selections (`<600×250`), boosts contrast via Pillow, runs offline `tesseract` (`OMP_THREAD_LIMIT=1`), and copies the text to both X11 `clipboard` and `primary` selections.
+
+### 11. `bio_unlock.py` + `pcgdm-bio-unlock.apk` — Offline S9+ Rear-Fingerprint PC Unlocker
+* **Zero-Internet Challenge-Response**: Galaxy S9+ Android app (`bio_unlock_app/`) prompts the rear fingerprint sensor (`BiometricPrompt` / `FingerprintManager`), connects over **Bluetooth RFCOMM (ch 22)**, **USB (`adb reverse`)**, or **LAN/Hotspot TCP (`29422`) + UDP discovery (`29423`)**, and signs a random nonce with **HMAC-SHA256**.
+* **Full Boot + Lockscreen Support**: Installed via `sudo ./install_root_biounlock.sh` as root `pcgdm-biounlock.service` with a `pam_exec` hook in `/etc/pam.d/lightdm` (for cold-boot LightDM login) and direct `xfce4-screensaver-command -d` unlock (`Super + L`).
+
+### 12. `mac_visualizer.py` & `adjust_kbd_light.py` — Keyboard Audio Visualizer & Backlight Daemon
+* Captures speaker playback audio (never microphone) to pulse the MacBook keyboard backlight to music beats (`music`) or keystrokes (`typing`), while preserving manual F5/F6 brightness control.
+
+### 13. `mac_call.py` & `tele_key.py` — Bluetooth Call Bridge & USB Telegram Remote
+* **`mac_call.py`**: Detects incoming Bluetooth phone calls, flashes keyboard lighting, and lets you answer/hang up from desktop hotkeys (`Super + C` / `Super + Shift + C`).
+* **`tele_key.py`**: Hardware-key-gated Telegram bot bridge for remote telemetry, directory browsing, voice TTS, and media capture.
+
+---
+
+> See **[FUNCTIONS_DOCS.md](file:///home/librarianist/pcGDM/FUNCTIONS_DOCS.md)** for the complete function-by-function API reference across all files.
+
 ---
 
 ## Directory Overview
 
 ```text
 /home/librarianist/pcGDM/
-├── godmode.sh           # Master CLI controller to manage and monitor all engines
-├── hive_nexus.py        # Local mesh IoT & device coordinator (Universal Linux)
-├── hyper_grab.py        # Autonomous clip-to-action downloader (Universal Linux)
-├── warp_ram.py          # In-memory build scratchpad & auto-sync (Universal Linux)
-├── auto_janitor.py      # Real-time inotify file organizer (Universal Linux)
-├── janitorctl.sh        # Service controller for Auto-Janitor
-├── focus_freezer.py     # Background browser tab zero-CPU freezer (Universal Linux)
-├── mac_hud.py           # Hardware keyboard backlight pulse & HUD (Linux sysfs LEDs)
-├── airdrop_zero.py      # Micro-web peer-to-peer file dropper (Universal Linux)
-├── cryo_ram_boost.py    # Power profiles, fan curves & RAM subsystem engine
-├── .gitignore           # Git ignore file for logs, pycache, and temporary state
-└── README.md            # Documentation, compatibility matrix, and setup guide
+├── godmode.sh                  # Master CLI controller to manage and monitor core engines
+├── cctv_grid.py                # Live multi-workspace CCTV grid, zoom & workspace switcher
+├── ocr_grab.py                 # Offline screen-region Tesseract OCR to clipboard (Super+O)
+├── bio_unlock.py               # Offline BT/TCP/UDP HMAC fingerprint unlocker (LightDM + XFCE)
+├── install_root_biounlock.sh   # Installs root pcgdm-biounlock.service & LightDM PAM hook
+├── bio_unlock_app/             # Android source & resources for PC Bio-Unlock
+├── pcgdm-bio-unlock.apk        # Signed APK for Galaxy S9+ rear-fingerprint unlock
+├── mac_visualizer.py           # Real-time audio beat & typing keyboard backlight visualizer
+├── adjust_kbd_light.py         # Manual Apple SMC keyboard backlight controller & daemon
+├── mac_call.py                 # Hands-free Bluetooth phone call bridge
+├── tele_key.py                 # USB hardware key Telegram remote bridge
+├── hive_nexus.py               # Local mesh IoT & device coordinator (Universal Linux)
+├── hyper_grab.py               # Autonomous clip-to-action downloader (Universal Linux)
+├── warp_ram.py                 # In-memory build scratchpad & auto-sync (Universal Linux)
+├── auto_janitor.py             # Real-time inotify file organizer (Universal Linux)
+├── janitorctl.sh               # Service controller for Auto-Janitor
+├── focus_freezer.py            # Background browser tab zero-CPU freezer (Universal Linux)
+├── mac_hud.py                  # Hardware keyboard backlight pulse & HUD (Linux sysfs LEDs)
+├── airdrop_zero.py             # Micro-web peer-to-peer file dropper (Universal Linux)
+├── cryo_ram_boost.py           # Power profiles, fan curves & RAM subsystem engine
+├── FUNCTIONS_DOCS.md           # Full function-by-function API & symbol reference
+├── .gitignore                  # Git ignore file for logs, pycache, and temporary state
+└── README.md                   # Documentation, compatibility matrix, and setup guide
 ```
 
 ---
@@ -143,6 +187,12 @@ This single command sets up:
 8. `pcgdm-telekey.service` (`systemd --user`)
 9. `pcgdm-cryo.service` (root `systemd`)
 10. Passwordless sudoers rule for CPU/thermal execution.
+
+Additional standalone services installed in this workspace:
+* `pcgdm-cctv.service` (`systemd --user`) — registers `Super+G` & `Super+Z` for `cctv_grid.py`
+* `pcgdm-ocr.service` (`systemd --user`) — registers `Super+O` for `ocr_grab.py`
+* `pcgdm-biounlock.service` (root `systemd`) — installed via `sudo ./install_root_biounlock.sh`
+* `pcgdm-visualizer.service`, `pcgdm-kbdbacklight.service`, `pcgdm-callbridge.service`, `pcgdm-kdeconnect.service` (`systemd --user`)
 
 ### 2. Verify Running Services
 Check the live status of all hardware telemetry and background services:
