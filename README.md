@@ -27,6 +27,7 @@ The suite is engineered to run on standard Linux installations as well as Apple 
 | **`bio_unlock.py`** | **100% Universal + Android** | Linux PC (`systemd` + LightDM/XFCE) + Galaxy S9+ APK | TCP `29422`, UDP `29423`, Bluetooth RFCOMM `22`, `pam_exec`, `HMAC-SHA256` |
 | **`mac_call.py`** | **100% Universal (Bluetooth)** | Any Linux PC paired with Android/iOS via BlueZ HFP | `bluetoothctl`, BlueZ HFP, `zenity`/`rofi` |
 | **`tele_key.py`** | **100% Universal** | Any Linux PC with USB key + Telegram Bot API | `lsusb`, Telegram Bot API, TTS |
+| **`XANADU/` (`.xnd` Suite)** | **100% Universal + Android** | Linux Desktop (`.deb` / Electron / FastAPI / Rust) + Android (`.apk`) | Ed25519, Wasmtime (`backend.wasm`), SQLite FTS5, Nostr/UDP Mesh, Sneakernet QR (`XNDQ1`), Biometric Hardware Vault |
 
 ---
 
@@ -128,6 +129,17 @@ The suite is engineered to run on standard Linux installations as well as Apple 
 ### 13. `mac_call.py` & `tele_key.py` — Bluetooth Call Bridge & USB Telegram Remote
 * **`mac_call.py`**: Detects incoming Bluetooth phone calls, flashes keyboard lighting, and lets you answer/hang up from desktop hotkeys (`Super + C` / `Super + Shift + C`).
 * **`tele_key.py`**: Hardware-key-gated Telegram bot bridge for remote telemetry, directory browsing, voice TTS, and media capture.
+
+### 14. `XANADU/` — Sovereign `.xnd` Hypertext Network, WASM Capsule Runtime & P2P Browser
+* **WebAssembly (`backend.wasm`) & Sandboxed Python (`backend.py`) App Capsules**:
+  * Capability-based **Wasmtime** runtime (`XANADU/xnd-hub/services/wasm_sandbox.py`) executing compiled `.wasm` capsule backends with deterministic CPU fuel metering (`XND_WASM_FUEL`), linear memory caps (`64 MB`), LRU module caching, and host RPC imports (`xnd.db_query`, `xnd.auth_verify`, `xnd.log`), alongside AST-validated subprocess-isolated `backend.py` capsules (`services/capsule_sandbox.py`).
+* **New Sovereign Subsystems**:
+  * **Time-Travel Graph & Global Provenance Blame (`routers/time_travel.py`)**: Inspect character-exact transclusion provenance, author pubkeys, and `edited`/`retracted` status (`/api/blame/{domain}`), or scrub the entire `.xnd` citation graph across historical timestamps (`/api/graph/timetravel`).
+  * **Air-Gapped Sneakernet & Animated QR (`XNDQ1`) Sync (`services/sneakernet_sync.py`)**: Export/import SHA-256 verified, zlib-compressed `.xndbundle` delta files over removable USB drives or stream/reassemble looping SVG QR frames (`/api/sneakernet/qr/encode`, `/api/sneakernet/qr/receive`).
+  * **Hardware-Gated Domain Signing (`services/hardware_vault.py`)**: Enroll hardware-backed Ed25519 keys (Android Keystore / FIDO2) with optional biometric HMAC-SHA256 verification and strip local private keys from disk (`/api/hardware-vault/enroll`, `/api/hardware-vault/challenge`, `/api/hardware-vault/rotate`).
+  * **Web-of-Trust PageRank & E2EE Mesh AI Inference (`services/trust_rank.py`, `services/mesh_inference.py`)**: Personalized PageRank over verified transclusions (`/api/trust/rank`) and end-to-end encrypted (`XND-E2EE-v1:`) peer-to-peer Stage-1 citation inference (`/api/mesh/ai/infer`).
+* **Cross-Platform Packaging**:
+  * Native Android browser + on-device node (`XANADU/xnd-android/xanadu-browser.apk`) and Linux Electron desktop package bundling `xnd-hub-bin` with embedded Wasmtime (`XANADU/xnd-desktop/dist/xanadu-desktop_0.1.0_amd64.deb`). See **[XANADU/README.md](file:///home/librarianist/pcGDM/XANADU/README.md)** for full details.
 
 ---
 

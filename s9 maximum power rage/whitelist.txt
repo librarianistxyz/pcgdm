@@ -1,0 +1,7 @@
+# Add Android package names here (one per line) that should NOT be
+# restricted in the background (e.g., messaging or alarm apps).
+# Lines starting with # are ignored.
+#
+# Example:
+# com.whatsapp
+# org.thoughtcrime.securesms
